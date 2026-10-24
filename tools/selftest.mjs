@@ -424,6 +424,27 @@ check(
   'the menu has no close chrome',
   !/dshPo_cancel/.test(clientExports.CSS),
 );
+{
+  const pick = clientExports.CSS.match(/\.dshPo_pick\{[^}]*\}/);
+  check(
+    'the flavours sit in one row that never wraps',
+    pick !== null && /flex-direction:row/.test(pick[0]) && /flex-wrap:nowrap/.test(pick[0]),
+    pick === null ? 'no rule' : pick[0].slice(0, 120),
+  );
+  check(
+    'the menu widens to fit its chips',
+    pick !== null && /width:max-content/.test(pick[0]) && /max-width:/.test(pick[0]),
+  );
+}
+check(
+  'the flavour names are Chinese, not hard/team/cool',
+  ['hard', 'team', 'cool'].every((id) => /^[\u4e00-\u9fa5]+$/.test(clientExports.zh['style.' + id])),
+  ['hard', 'team', 'cool'].map((id) => clientExports.zh['style.' + id]).join(' / '),
+);
+check(
+  'the English dictionary still says hard/team/cool',
+  ['hard', 'team', 'cool'].every((id) => clientExports.en['style.' + id] === id),
+);
 
 // Render the open menu: the same factory loaded again, with a stateful React
 // stub whose useState yields `picking = true` on the component's third call.
