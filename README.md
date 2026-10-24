@@ -273,10 +273,11 @@ POST /dsh-prompt-optimizer/optimize
 
 错误码：`EMPTY_INPUT`(400)、`INPUT_TOO_LONG`(413)、`BAD_JSON`(400)、`BUSY`(429)、`NOT_FOUND`(404)、`PRESET_NEEDS_MODEL`(502，选了 Trellis 规范但没有可用模型)；模型侧失败原样带出 provider-neutral code（`NO_ADAPTER` / `RATE_LIMIT` / `CONTEXT_WINDOW_EXCEEDED`…，502）。
 
-两条降级路径：
+三条降级路径：
 
 1. **模型可用** → `ctx.llm.stream()` 流式锻造，取 `text-delta` 拼文本，读 `finish.reason` 判成败。
-2. **模型不可用/报错**（默认开 `localFallback`）→ **本地确定性兜底**：原文一字不改塞进硬汉外壳（动员 + 硬指标 + 自查 + 催命收尾）。
+2. **模型交回一句话** → 太短就当场打回重锻一次（`buildExpandPrompt` 把上一版贴回去，逐条要求补齐），成功时 `warning.code = "EXPANDED"`。
+3. **模型不可用/报错/连着偷懒**（默认开 `localFallback`）→ **本地确定性兜底**：原文按分句逐条摊开，一字不改塞进硬汉外壳（动员 + 每条一行硬指标 + 自查 + 催命收尾）。连本地都只能交一句话时 `warning.code = "THIN_OUTPUT"`；选了 Trellis 规范却没有可用模型则直接 502 `PRESET_NEEDS_MODEL`，绝不拿两行残卡冒充任务书。
 
 ---
 
@@ -286,7 +287,7 @@ POST /dsh-prompt-optimizer/optimize
 git clone https://github.com/asdnmy123/dsh-prompt-optimizer.git
 cd dsh-prompt-optimizer
 
-# 硬规矩：不全绿不许合。零依赖，离线 140 项。
+# 硬规矩：不全绿不许合。零依赖，离线 157 项。
 node tools/selftest.mjs
 
 # 重出按钮截图（真 client.js + 真样式表，无头 Edge）
@@ -299,7 +300,7 @@ $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 CI：[`.github/workflows/selftest.yml`](.github/workflows/selftest.yml) 在 Node 18/20/22 上跑自测 + 语法体检。
 
-**验证覆盖**（140 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
+**验证覆盖**（157 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
 
 其中外观有三道锁：
 
@@ -326,7 +327,7 @@ index.js                   宿主半：HTTP 面 + 提示词锻造 + 路由/降�
 client.js                  客户端半：♂harden 按钮 + 样式 + 插槽注册
 cordis.patch.yml           挂载声明：往 profile 里插一行 loader
 package.json               dsh.bundle.patch / dsh.client 声明
-tools/selftest.mjs         离线自测（140 项）
+tools/selftest.mjs         离线自测（157 项）
 tools/preview.html         真组件预览 + 计算样式探测
 tools/asar.mjs             Electron ASAR 迷你读取器（本地侦察用）
 preview/harden-button.png  四态 + 菜单截图

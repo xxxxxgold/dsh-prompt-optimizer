@@ -44,6 +44,37 @@ section('host half');
 const host = await import('../index.js');
 const H = host.__internals;
 
+/** A well-formed hardened answer: opener, ≥2 bullets, self-check, closer. */
+const HARDENED = [
+  '哥们，直接给我整一个成品，gogogo！',
+  '- 写一个网页：原样兑现，一个字不许改。',
+  '- 细节拉满，别留占位符和 TODO。',
+  '- 能并行就并行，越快越好。',
+  '交活儿前自己按上面的硬指标逐条核对一遍，gogogo！',
+].join('\n');
+
+/** A well-formed Trellis issue card (six+ lines, sections intact). */
+const CARD = [
+  '## 任务：周报页白屏',
+  'workType: issue ｜ slug 建议：issue-10-25-weekly-blank',
+  '## 现象',
+  '点周报就白屏。',
+  '## 复现步骤',
+  '1. 打开周报页。',
+  '## 期望 vs 实际',
+  '期望看到报表，实际白屏。',
+  '## 影响范围',
+  '全部用户。',
+  '## 证据',
+  '控制台报错。',
+  '## 根因候选（最多 3 条，按可能性排序）',
+  '1. 空数据没兜底。',
+  '## 修复方案',
+  '补空态。',
+  '## 回归验证',
+  '手点一遍。',
+].join('\n');
+
 check('module exports name', host.name === 'dsh-prompt-optimizer', String(host.name));
 check('module injects webServer', Array.isArray(host.inject) && host.inject.includes('webServer'), JSON.stringify(host.inject));
 
@@ -139,10 +170,14 @@ function fakeLlm(chunks, options) {
     listProviders: () => [{ id: 'fake-provider', name: 'Fake' }],
     listModels: async (provider) => [{ provider, id: 'fake-model' }],
     stream: (callOptions) => {
+      const index = record.calls.length;
       record.calls.push(callOptions);
       if (settings.throwOnStream === true) throw Object.assign(new Error('boom'), { code: 'STREAM_BOOM' });
+      // `[[call1], [call2]]` scripts a different answer per call (repair pass).
+      const scripted = Array.isArray(chunks[0]);
+      const current = scripted ? chunks[Math.min(index, chunks.length - 1)] || [] : chunks;
       return (async function* generate() {
-        for (const chunk of chunks) yield chunk;
+        for (const chunk of current) yield chunk;
       })();
     },
   };
@@ -192,8 +227,8 @@ function mountHost(llm, config, agentDefaultModel) {
 // --- POST /optimize, happy path -------------------------------------------
 {
   const llm = fakeLlm([
-    { type: 'text-delta', index: 0, text: '哥们，' },
-    { type: 'text-delta', index: 0, text: '直接给我整一个成品，gogogo！' },
+    { type: 'text-delta', index: 0, text: HARDENED.slice(0, 10) },
+    { type: 'text-delta', index: 0, text: HARDENED.slice(10) },
     { type: 'usage', usage: { inputTokens: 10, outputTokens: 10 } },
     { type: 'finish', reason: { kind: 'stop' } },
   ]);
@@ -202,7 +237,7 @@ function mountHost(llm, config, agentDefaultModel) {
   await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写一个网页' })), res);
   const body = res.json();
   check('optimize answers ok', res.statusCode === 200 && body.ok === true, JSON.stringify(body));
-  check('optimize joins the text deltas', body.text === '哥们，直接给我整一个成品，gogogo！', JSON.stringify(body.text));
+  check('optimize joins the text deltas', body.text === HARDENED, JSON.stringify(body.text));
   check('optimize reports the llm engine', body.engine === 'llm', String(body.engine));
   check('optimize uses the agent default route', body.route.provider === 'seeded' && body.route.model === 'seeded-model', JSON.stringify(body.route));
   const call = llm.record.calls[0];
@@ -217,7 +252,7 @@ function mountHost(llm, config, agentDefaultModel) {
 // --- POST /optimize, Trellis preset ---------------------------------------
 {
   const llm = fakeLlm([
-    { type: 'text-delta', index: 0, text: '## 任务：周报\n## 复现步骤\n先跑一遍' },
+    { type: 'text-delta', index: 0, text: CARD },
     { type: 'finish', reason: { kind: 'stop' } },
   ]);
   const handler = mountHost(llm, undefined);
@@ -233,20 +268,20 @@ function mountHost(llm, config, agentDefaultModel) {
 // --- POST /optimize, output hygiene ---------------------------------------
 {
   const llm = fakeLlm([
-    { type: 'text-delta', index: 0, text: '以下是优化后的提示词：\n```\n哥们，细节拉满！\n```\n' },
+    { type: 'text-delta', index: 0, text: '以下是优化后的提示词：\n```\n' + HARDENED + '\n```\n' },
     { type: 'finish', reason: { kind: 'stop' } },
   ]);
   const handler = mountHost(llm, undefined);
   const res = fakeResponse();
   await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '做个动画' })), res);
   const body = res.json();
-  check('wrapped model output is unwrapped', body.text === '哥们，细节拉满！', JSON.stringify(body.text));
+  check('wrapped model output is unwrapped', body.text === HARDENED, JSON.stringify(body.text));
 }
 
 // --- POST /optimize, discovery when no default model ----------------------
 {
   const llm = fakeLlm([
-    { type: 'text-delta', index: 0, text: '哥们冲！' },
+    { type: 'text-delta', index: 0, text: HARDENED },
     { type: 'finish', reason: { kind: 'stop' } },
   ]);
   const handler = mountHost(llm, undefined);
@@ -730,6 +765,64 @@ check(
   check('client registers the entry component', captured.slot.component === clientExports.HardForgeEntry);
   check('client injects its stylesheet', styleTags.length === 1 && String(styleTags[0].dataset.pluginCss).startsWith('dsh-prompt-optimizer/'), String(styleTags.length));
   check('client used ctx.effect for its side effects', captured.effects >= 2, String(captured.effects));
+}
+
+// --- thin-answer guard -----------------------------------------------------
+section('thin answers get re-forged');
+
+check('a one-line answer counts as thin', H.isThin('哥们冲！', 'native') === true);
+check('a structured brief passes the thin check', H.isThin(HARDENED, 'native') === false);
+check('a task card passes the thin check', H.isThin(CARD, 'issue') === false);
+check('a two-line card is still thin', H.isThin('## 任务：x\n## 现象\ny', 'issue') === true);
+check(
+  'the local envelope lists one bullet per clause',
+  H.hardenLocally('写脚本；不改文件名；支持 jpg').includes('- 写脚本：') &&
+    H.hardenLocally('写脚本；不改文件名；支持 jpg').includes('- 不改文件名：'),
+);
+
+{
+  const llm = fakeLlm([
+    [
+      { type: 'text-delta', index: 0, text: '哥们，直接给我整一个成品，gogogo！' },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ],
+    [
+      { type: 'text-delta', index: 0, text: HARDENED },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ],
+  ]);
+  const handler = mountHost(llm, undefined);
+  const res = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写一个网页' })), res);
+  const body = res.json();
+  check('a one-line answer is re-forged', body.engine === 'llm' && body.text === HARDENED, JSON.stringify({ engine: body.engine }));
+  check('the repair is reported', body.warning !== undefined && body.warning.code === 'EXPANDED', JSON.stringify(body.warning));
+  check('the repair asks for the missing rows', /上一版被打回/.test(llm.record.calls[1].messages[0].content[0].text), 'repair prompt');
+}
+
+{
+  const llm = fakeLlm([
+    { type: 'text-delta', index: 0, text: '哥们冲！' },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]);
+  const handler = mountHost(llm, undefined);
+  const res = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写脚本；不改文件名；支持 jpg' })), res);
+  const body = res.json();
+  check('a model that keeps compressing falls back to the envelope', body.engine === 'local' && body.warning.code === 'THIN_OUTPUT', JSON.stringify({ engine: body.engine, warning: body.warning }));
+  check('the fallback still keeps every clause', body.text.includes('- 不改文件名：') && body.text.includes('- 支持 jpg：'), body.text.slice(0, 80));
+}
+
+{
+  const llm = fakeLlm([
+    { type: 'text-delta', index: 0, text: '## 任务：x\n## 现象\ny' },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]);
+  const handler = mountHost(llm, undefined);
+  const res = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '周报坏了', preset: 'issue' })), res);
+  const body = res.json();
+  check('a stub card never ships as a task card', res.statusCode === 502 && body.error.code === 'PRESET_NEEDS_MODEL', JSON.stringify(body.error));
 }
 
 // ---------------------------------------------------------------------------

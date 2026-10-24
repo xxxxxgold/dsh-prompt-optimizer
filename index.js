@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
@@ -215,9 +215,13 @@ export function buildSystemPrompt(style, styleHint, preset) {
       '',
       '【结构：锻造后的提示词长什么样】',
       '- 开头一句动员：哥们式开场 + 说清要干什么。',
-      '- 正文把原文要求写成一串硬指标，自然段配少量短横线清单。',
+      '- 正文把原文要求写成一串硬指标：**原文每一条要求单独占一行**，行首用「-」，不许把两条并成一句。',
       '- 必须补一段自我验收：要求执行者交活儿前按上面的硬指标逐条核对。',
       '- 结尾一句催命收尾：gogogo / 一次性交付 / 让所有人也硬邦邦。',
+      '',
+      '【长度下限：短了就是没干完】',
+      '- 整篇不少于五行；原文有几条要求，硬指标就至少有几条。',
+      '- 禁止把整篇压成一句话、一段话，或者只给一个结论。敢压缩就重锻。',
       '',
       '【输出格式：严格遵守】',
       '- 只输出锻造后的提示词本身，第一个字就是提示词。',
@@ -264,17 +268,29 @@ export function buildUserPrompt(text, preset) {
  * @returns the locally forged prompt.
  */
 export function hardenLocally(text) {
+  const draft = String(text === undefined || text === null ? '' : text).trim();
+  // One bullet per clause: with no model on the hook this is the only thing
+  // keeping the envelope from collapsing into the same one-liner the model
+  // was rejected for.
+  const clauses = draft
+    .split(/[\n；;。]+/)
+    .map((clause) => clause.trim())
+    .filter((clause) => clause !== '');
+  const items =
+    clauses.length > 1
+      ? clauses.map((clause) => `- ${clause}：原样兑现，一个字不许改。`)
+      : ['- 上面每一条要求、约束、尺寸、格式、技术栈，原样兑现，少一条都不算交付。'];
   return [
     '哥们，时间紧任务重，直接开干，别磨叽。',
     '',
     '【原始需求，一个字都不能改】',
-    String(text).trim(),
+    draft,
     '',
     '【硬指标，逐条必须满足】',
-    '- 上面每一条要求、约束、尺寸、格式、技术栈，原样兑现，少一条都不算交付。',
+    ...items,
     '- 细节拉满，别整虚的，别交半成品，别留占位符和 TODO。',
     '- 能并行就并行，越快越好，你必须激进，能一次干完就一次干完。',
-    '- 交活儿前自己按上面的硬指标逐条核对一遍。',
+    '- 交活儿前自己按上面的硬指标逐条核对一遍，少一条都不算交付。',
     '',
     '肌肉团队全员就位，gogogo，耍起耍起，给我硬邦邦的，一次性交付，哥们谢谢你！',
   ].join('\n');
@@ -293,6 +309,37 @@ const LEADING_NOISE =
 
 /** One fenced block wrapping the whole answer. */
 const FENCED_BLOCK = /^```[a-zA-Z0-9_-]*[ \t]*\n([\s\S]*?)\n?```$/;
+
+/** A rewrite that collapsed to one line fails the brief even on a clean stop. */
+export function isThin(clean, preset) {
+  const lines = String(clean === undefined || clean === null ? '' : clean)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  if (preset !== 'native') return lines.length < 6;
+  if (lines.length < 4) return true;
+  const bullets = lines.filter((line) => /^[-*•]|^\d+[.)、]/.test(line)).length;
+  return bullets < 2;
+}
+
+/**
+ * Second-turn instruction for the repair pass: tell the model exactly what the
+ * rejected version was missing instead of hoping a retry lands better.
+ */
+export function buildExpandPrompt(text, preset, previous) {
+  return [
+    buildUserPrompt(text, preset),
+    '',
+    '【上一版被打回：太短了】',
+    String(previous === undefined || previous === null ? '' : previous),
+    '',
+    '【这版必须满足】',
+    preset !== 'native'
+      ? '按系统指令里的骨架逐节写全，一节都不许省，每节都要有实打实的内容。'
+      : '把原文每一条要求单独写成一行硬指标（行首「-」），一条都不许合并；再补自我验收和催命收尾，整篇不少于五行。',
+    '不许概括，不许压成一句话。',
+  ].join('\n');
+}
 
 /** A trailing courtesy the model likes to add even when told not to. */
 const TRAILING_NOISE = /\n+(?:如果需要|如果你需要|需要我|如需|如果需要调整)[^\n]{0,120}$/u;
@@ -556,6 +603,27 @@ export async function optimize(ctx, config, text, style, preset) {
       try {
         const raw = await streamRewrite(llm, route, system, user, request);
         const clean = sanitizeOutput(raw);
+        if (clean !== '' && isThin(clean, shape)) {
+          // One repair pass: flash-class models like answering a request for a
+          // brief with a single sentence. Ask again with the bill of materials.
+          let expanded = '';
+          try {
+            expanded = sanitizeOutput(await streamRewrite(llm, route, system, buildExpandPrompt(text, shape, clean), request));
+          } catch (repairError) {
+            expanded = '';
+          }
+          if (expanded !== '' && !isThin(expanded, shape)) {
+            return {
+              text: expanded,
+              engine: 'llm',
+              route,
+              ms: Date.now() - started,
+              warning: { code: 'EXPANDED', message: '模型第一版太短，已重锻一次' },
+            };
+          }
+          warning = { code: 'THIN_OUTPUT', message: '模型把多条要求压成一句话，改用本地兜底' };
+          break;
+        }
         if (clean !== '') {
           return { text: clean, engine: 'llm', route, ms: Date.now() - started };
         }
@@ -711,6 +779,8 @@ export const __internals = {
   PRESETS,
   PRESET_IDS,
   PRESET_SKELETONS,
+  isThin,
+  buildExpandPrompt,
   buildSystemPrompt,
   buildUserPrompt,
   hardenLocally,
