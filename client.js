@@ -303,7 +303,8 @@ window.__ModuleLoader__.load({
       return body;
     }
 
-    /** Locale lookup with a per-key fallback so one missing key never blanks the UI. */    function translator(t) {
+    /** Locale lookup with a per-key fallback so one missing key never blanks the UI. */
+    function translator(t) {
       const dict = typeof navigator !== 'undefined' && typeof navigator.language === 'string' && navigator.language.toLowerCase().startsWith('zh') ? zh : en;
       return (key) => {
         if (typeof t === 'function') {
@@ -339,8 +340,11 @@ window.__ModuleLoader__.load({
       const [phase, setPhase] = react.useState('idle');
       const [note, setNote] = react.useState('');
       const [picking, setPicking] = react.useState(false);
-      const [style, setStyle] = react.useState(readStoredStyle());
+      const [style, setStyle] = react.useState(() => readStoredStyle());
       const abortRef = react.useRef(null);
+      // The pill and its menu share one positioned root; the menu is a sibling
+      // so the pill stays mounted (and keeps focus) while the menu is open.
+      const rootRef = react.useRef(null);
 
       // Abandon one in-flight rewrite when the entry unmounts, and clear the
       // transient note timer so a settled state cannot be overwritten later.
@@ -383,12 +387,32 @@ window.__ModuleLoader__.load({
         return undefined;
       }, [picking]);
 
+      // A click anywhere outside the control puts the menu away again: the pill
+      // is one option, but clicking away is the reflex most people have.
+      react.useEffect(() => {
+        if (!picking) return undefined;
+        const onDown = (event) => {
+          const root = rootRef.current;
+          const target = event !== null && typeof event === 'object' ? event.target : null;
+          if (root !== null && root !== undefined && typeof root.contains === 'function' && target !== null && root.contains(target)) return;
+          setPicking(false);
+        };
+        try {
+          if (typeof document !== 'undefined' && document !== null && typeof document.addEventListener === 'function') {
+            document.addEventListener('pointerdown', onDown);
+            return () => document.removeEventListener('pointerdown', onDown);
+          }
+        } catch {
+          /* no document: the cancel chip still works */
+        }
+        return undefined;
+      }, [picking]);
+
       const empty = typeof draft !== 'string' || draft.trim() === '';
       const busy = phase === 'busy';
 
       const run = react.useCallback(async (flavour) => {
         const text = typeof draft === 'string' ? draft : '';
-        const picked = STYLE_IDS.indexOf(flavour) === -1 ? 'hard' : flavour;
         if (text.trim() === '' || busy) return;
         const controller = typeof AbortController === 'function' ? new AbortController() : null;
         abortRef.current = controller;
@@ -398,7 +422,7 @@ window.__ModuleLoader__.load({
           const response = await fetch(ENDPOINT, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(postBody(text, picked, typeof navigator !== 'undefined' ? navigator.language : undefined)),
+            body: JSON.stringify(postBody(text, flavour, typeof navigator !== 'undefined' ? navigator.language : undefined)),
             signal: controller === null ? undefined : controller.signal,
           });
           let body = null;
@@ -447,7 +471,7 @@ window.__ModuleLoader__.load({
 
       const openPicker = () => {
         if (empty || busy) return;
-        setPicking(!picking);
+        setPicking((open) => !open);
       };
 
       const choose = (flavour) => {
@@ -457,9 +481,25 @@ window.__ModuleLoader__.load({
         void run(flavour);
       };
 
-      // Two faces of one control: the pill, and the flavour menu it opens.
-      // Both are a single element at index 0 so the slot layout never shifts.
-      const control = picking
+      // One control, two faces: the pill never leaves the row, the menu floats
+      // above it. Keeping the pill mounted holds the row's height and the
+      // toggle's focus, and gives `data-open` something real to report.
+      const pill = jsxs('button', {
+        type: 'button',
+        className: 'dshPo_btn',
+        'data-phase': phase,
+        'data-open': picking ? 'true' : 'false',
+        disabled: empty || busy,
+        title,
+        'aria-label': busy ? title : label + '：' + title,
+        'aria-busy': busy ? 'true' : undefined,
+        'aria-haspopup': 'menu',
+        'aria-expanded': picking ? 'true' : 'false',
+        onClick: openPicker,
+        children: [jsx('span', { className: 'dshPo_shine', 'aria-hidden': 'true' }), jsx('span', { className: 'dshPo_label', children: label })],
+      });
+
+      const menu = picking
         ? jsxs('span', {
             className: 'dshPo_pick',
             role: 'menu',
@@ -495,26 +535,15 @@ window.__ModuleLoader__.load({
               }),
             ],
           })
-        : jsxs('button', {
-            type: 'button',
-            className: 'dshPo_btn',
-            'data-phase': phase,
-            'data-open': picking ? 'true' : undefined,
-            disabled: empty || busy,
-            title,
-            'aria-label': busy ? title : label + '：' + title,
-            'aria-busy': busy ? 'true' : undefined,
-            'aria-haspopup': 'menu',
-            'aria-expanded': picking ? 'true' : 'false',
-            onClick: openPicker,
-            children: [jsx('span', { className: 'dshPo_shine', 'aria-hidden': 'true' }), jsx('span', { className: 'dshPo_label', children: label })],
-          });
+        : null;
 
       return jsxs('span', {
         className: 'dshPo_root',
         'data-dsh-prompt-optimizer': 'button',
+        ref: rootRef,
         children: [
-          control,
+          pill,
+          menu,
           note === ''
             ? null
             : jsx('span', {

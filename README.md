@@ -155,7 +155,7 @@ dsh plugin --profile <你的-profile> add link:D:\dsh-plugins\dsh-prompt-optimiz
 ```powershell
 # 1. 宿主半活着吗？（端口换成你 DSH 的实际端口）
 curl.exe http://127.0.0.1:19387/dsh-prompt-optimizer/health
-# → {"ok":true,"plugin":"dsh-prompt-optimizer","version":"0.2.0","style":"hard","styles":["hard","team","cool"],"localFallback":true}
+# → {"ok":true,"plugin":"dsh-prompt-optimizer","version":"0.2.1","style":"hard","styles":["hard","team","cool"],"localFallback":true}
 
 # 2. 插件在不在清单里
 dsh plugin --profile <你的-profile> list
@@ -194,7 +194,7 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 3. 等 3~6 秒（按钮进「锻造中」）。
 4. 结果已在输入框里 —— **看完再发**。不满意就 `Ctrl+Z`，编辑器自带撤销。
 
-口味就在按钮上选，不用改配置：菜单里高亮的是上次用过的那个（记在 `localStorage`），点 `✕` 或按 `Esc` 收起。想固定默认值，才需要动配置或 HTTP 调用里的 `"style"`。
+口味就在按钮上选，不用改配置：菜单里高亮的是上次用过的那个（记在 `localStorage`），点 `✕`、按 `Esc` 或点菜单外面都能收起。想固定默认值，才需要动配置或 HTTP 调用里的 `"style"`。
 
 | 口味 | 侧重 |
 |---|---|

@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {

@@ -457,9 +457,15 @@ check(
     throw new Error('unexpected require: ' + specifier);
   });
   const tree = mod.HardForge({ useInput: () => '写个周报', inputActions: { setDraft: () => {} }, t: undefined });
-  const picker = tree.props.children[0];
+  const pill = tree.props.children[0];
+  const picker = tree.props.children[1];
   const chips = (picker.props.children || []).filter(
     (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
+  );
+  check(
+    'the pill stays mounted while the menu is open',
+    pill.props.className === 'dshPo_btn' && pill.props['data-open'] === 'true' && pill.props['aria-expanded'] === 'true',
+    JSON.stringify({ className: pill.props.className, open: pill.props['data-open'] }),
   );
   check(
     'clicking the pill reveals three flavour chips',
