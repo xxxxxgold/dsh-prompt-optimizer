@@ -9,13 +9,13 @@
 ![node](https://img.shields.io/badge/node-%E2%89%A518-43853d)
 ![deps](https://img.shields.io/badge/runtime%20deps-0-black)
 
-![按钮四态预览（明/暗两底，真组件 + 真样式表无头渲染）](preview/harden-button.png)
+![按钮四态 + 菜单预览（明/暗两底，真组件 + 真样式表无头渲染）](preview/harden-button.png)
 
 ---
 
 ## 30 秒看懂
 
-DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它，先选口味（`hard` / `team` / `cool`），选完立刻开锻：
+DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它，菜单一屏两行：上行选**口味**（`hard` / `team` / `cool`），下行选**产出规范**（原生 / 需求 / 缺陷 / 重构），点哪个立刻按哪套开锻：
 
 ```
 你的草稿  →  模型重写  →  硬汉任务书  →  直接写回输入框
@@ -31,6 +31,7 @@ DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它，先�
 - 原文什么语言，输出什么语言。
 - 模型挂了也有本地兜底 —— 按钮永远有产出，绝不给你一个干瞪眼的错误框。
 - **零第三方运行时依赖**：宿主半只用 DSH 公开契约，客户端半只吃 `react`。
+- 选了 Trellis 规范却够不着模型时**不糊弄**：直接报错说清是哪一环没通，绝不给你一份假任务书。
 
 ---
 
@@ -60,7 +61,7 @@ DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它，先�
 
 | 状态 | 长什么样 | 说明 |
 |---|---|---|
-| 输入框为空 | 胶囊降透明度 | 禁用；悬停提示「输入框是空的，先写点东西哥们」 |
+| 输入框为空 | 胶囊降透明度 | 仍可点开菜单；点了会提示「输入框是空的，先写点东西哥们」，不发给宿主 |
 | 空闲 | 流动热渐变环（橙→玫红→紫→金）+ 渐变文字 + 静态辉光 | 可点 |
 | 锻造中 | 环流速拉快（1.15s）+ 呼吸辉光 + 高光扫过 + 文字渐变走字 | 禁用防连点；文字仍是 `♂harden` |
 | 成功 | 青绿渐变环 + 一次弹跳 + 常亮绿辉光 | 结果已写回输入框，右侧小字「已锻造 · 模型出手」 |
@@ -179,7 +180,7 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 |---|---|---|
 | `profile "desktop" is managed exclusively by the Electron application` | 桌面版 profile 只认应用内管理器 | 别用 CLI，走 **设置 → 插件** |
 | 装完没按钮 | 客户端半没重新加载 | **刷新页面**（`Ctrl+R`）；不行就重启 DSH |
-| 按钮灰的、点不动 | 输入框是空的 | 先写字 |
+| 按钮发灰、像点不动 | 输入框是空的（口味仍能选，只差内容） | 先写字再点 |
 | `{"ok":false,"error":{"code":"NO_ADAPTER"}}` | 没有可用模型路由 | 在配置里显式写 `provider` / `model`，或留着 `localFallback: true` 让本地兜底顶上 |
 | `{"code":"unknown-plugin"}` | 插件名/profile 写错 | 名字就是 `dsh-prompt-optimizer`，一字不差 |
 | 装完还是老样子 | 改的是宿主半… | 宿主半改动要在插件管理器里**关掉再打开**；客户端半改动刷新页面 |
@@ -204,6 +205,19 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 
 菜单横向一行摆开三个口味，不换行；窗口窄的时候菜单整体加宽（上限 560px 或 92vw，再多就横向滑动）。中文界面显示中文名，英文界面显示 hard / team / cool，配置里的 `"style"` 值始终是这三个英文 id。
 
+### 产出规范：一按就成 Trellis 任务书
+
+下排四个「规范」是另一条正交的轴 —— 口味管**口气**，规范管**骨架**。选「原生」就是原来的一整段硬汉提示词；选另外三个，输出直接换成对应工作类型（[Trellis](https://github.com/1264459619/dsh-trellis)）的任务卡形状，粘进 `trellis_task_create` 就能开单：
+
+| 规范 | 产出骨架 | 对应 Trellis 轨道 |
+|---|---|---|
+| `native`（原生，默认） | 一整段硬汉提示词，不分节 | —— |
+| `feat`（需求） | 任务标题 + 背景问题 + 目标/非目标 + 范围 + 验收标准 + 约束风险 + 执行步骤（每条带「验收」「验证」）+ 阶段纪律 | `prd → design → impl → review → check` |
+| `issue`（缺陷） | 现象 + 复现步骤 + 期望vs实际 + 影响范围 + 证据 + 根因候选（≤3）+ 修复方案 + 回归验证 | `report → analyze → fix → fix-note` |
+| `refactor`（重构） | 现状扫描 + 候选范围 + 目标结构 + 行为不变契约 + 分批迁移步骤 + 阶段纪律 | `scan → design → apply → done` |
+
+硬约束：**事实仍然一条不丢**，模型只负责换骨架和口气，不许往里塞原文没有的步骤或指标。本地兜底只会写「原生」那种整段提示词 —— 所以选三个规范之一时如果没有可用模型，界面会明说 `PRESET_NEEDS_MODEL`，不会拿假骨架骗你。
+
 ---
 
 ## 配置
@@ -216,6 +230,7 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
       name: dsh-prompt-optimizer
       config:
         style: hard            # hard | team | cool
+        preset: native         # native | feat | issue | refactor
         provider: ''           # 留空 = 用当前 agent 默认模型
         model: ''              # 与 provider 同时给才生效
         maxTokens: 1600
@@ -230,6 +245,7 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 | 字段 | 默认 | 含义 |
 |---|---|---|
 | `style` | `hard` | 口味；非法值回落到 `hard` |
+| `preset` | `native` | 产出规范；非法值回落到 `native`。`native` 以外必须够得着模型 |
 | `provider` / `model` | 空 | 显式模型路由。留空则依次试 `ctx.agentDefaultModel` → 适配器目录里第一个有模型的 route |
 | `maxTokens` | `1600` | 单次输出上限 |
 | `temperature` | `0.9` | 采样温度（0–2） |
@@ -247,15 +263,15 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 
 ```
 GET  /dsh-prompt-optimizer/health
-     → { ok, plugin, version, style, localFallback }
+     → { ok, plugin, version, style, styles, preset, presets, localFallback }
 
 POST /dsh-prompt-optimizer/optimize
-     body: { "text": "<草稿>", "style": "hard|team|cool" }
-     → { ok: true, text, engine: "llm"|"local", route: { provider, model }|null, ms, warning? }
+     body: { "text": "<草稿>", "style": "hard|team|cool", "preset": "native|feat|issue|refactor" }
+     → { ok: true, style, preset, text, engine: "llm"|"local", route: { provider, model }|null, ms, warning? }
      → { ok: false, error: { code, message } }
 ```
 
-错误码：`EMPTY_INPUT`(400)、`INPUT_TOO_LONG`(413)、`BAD_JSON`(400)、`BUSY`(429)、`NOT_FOUND`(404)；模型侧失败原样带出 provider-neutral code（`NO_ADAPTER` / `RATE_LIMIT` / `CONTEXT_WINDOW_EXCEEDED`…，502）。
+错误码：`EMPTY_INPUT`(400)、`INPUT_TOO_LONG`(413)、`BAD_JSON`(400)、`BUSY`(429)、`NOT_FOUND`(404)、`PRESET_NEEDS_MODEL`(502，选了 Trellis 规范但没有可用模型)；模型侧失败原样带出 provider-neutral code（`NO_ADAPTER` / `RATE_LIMIT` / `CONTEXT_WINDOW_EXCEEDED`…，502）。
 
 两条降级路径：
 
@@ -270,12 +286,12 @@ POST /dsh-prompt-optimizer/optimize
 git clone https://github.com/asdnmy123/dsh-prompt-optimizer.git
 cd dsh-prompt-optimizer
 
-# 硬规矩：不全绿不许合。零依赖，离线 119 项。
+# 硬规矩：不全绿不许合。零依赖，离线 140 项。
 node tools/selftest.mjs
 
 # 重出按钮截图（真 client.js + 真样式表，无头 Edge）
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-& $edge --headless=new --disable-gpu --hide-scrollbars --window-size=980,620 `
+& $edge --headless=new --disable-gpu --hide-scrollbars --window-size=1060,500 `
   --virtual-time-budget=2600 --user-data-dir="$env:TEMP\dsh-po-shot" `
   --screenshot="preview\harden-button.png" `
   "file:///$PWD/tools/preview.html"
@@ -283,7 +299,7 @@ $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 CI：[`.github/workflows/selftest.yml`](.github/workflows/selftest.yml) 在 Node 18/20/22 上跑自测 + 语法体检。
 
-**验证覆盖**（119 项）：模块名/inject、系统提示词铁律与样本、口味切换、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、props 缺失不渲染、样式表注入与清理。
+**验证覆盖**（140 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
 
 其中外观有三道锁：
 
@@ -310,10 +326,10 @@ index.js                   宿主半：HTTP 面 + 提示词锻造 + 路由/降�
 client.js                  客户端半：♂harden 按钮 + 样式 + 插槽注册
 cordis.patch.yml           挂载声明：往 profile 里插一行 loader
 package.json               dsh.bundle.patch / dsh.client 声明
-tools/selftest.mjs         离线自测（119 项）
+tools/selftest.mjs         离线自测（140 项）
 tools/preview.html         真组件预览 + 计算样式探测
 tools/asar.mjs             Electron ASAR 迷你读取器（本地侦察用）
-preview/harden-button.png  四态截图
+preview/harden-button.png  四态 + 菜单截图
 .github/workflows/         CI
 scratch/                   本地侦察料，已 gitignore，不入库
 ```

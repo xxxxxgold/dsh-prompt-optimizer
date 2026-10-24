@@ -56,6 +56,32 @@ check('style hint is appended when supplied', /【本部署追加的口气要求
 check('unknown style falls back to hard', H.buildSystemPrompt('nonsense', '') === H.buildSystemPrompt('hard', ''));
 check('team flavour is selectable', /肌肉集团总动员/.test(H.buildSystemPrompt('team', '')));
 
+// --- Trellis presets -------------------------------------------------------
+const nativeSystem = H.buildSystemPrompt('hard', '', 'native');
+check('native preset adds no task card', !/Trellis/.test(nativeSystem), 'native');
+check(
+  'feat preset demands the feature card',
+  /workType: feat/.test(H.buildSystemPrompt('hard', '', 'feat')) &&
+    /## 验收标准/.test(H.buildSystemPrompt('hard', '', 'feat')) &&
+    /feat-<MM-DD>/.test(H.buildSystemPrompt('hard', '', 'feat')),
+);
+check(
+  'issue preset demands the bug card',
+  /workType: issue/.test(H.buildSystemPrompt('hard', '', 'issue')) && /## 复现步骤/.test(H.buildSystemPrompt('hard', '', 'issue')),
+);
+check(
+  'refactor preset demands the refactor card',
+  /workType: refactor/.test(H.buildSystemPrompt('cool', '', 'refactor')) && /## 行为不变契约/.test(H.buildSystemPrompt('cool', '', 'refactor')),
+);
+check('unknown preset falls back to native', H.buildSystemPrompt('hard', '', 'nonsense') === nativeSystem);
+check('preset keeps the chosen voice', /肌肉集团总动员/.test(H.buildSystemPrompt('team', '', 'feat')));
+check('empty preset argument stays native', H.buildSystemPrompt('hard', '', undefined) === nativeSystem);
+check('preset skeletons cover every structured shape', JSON.stringify(Object.keys(H.PRESET_SKELETONS).sort()) === JSON.stringify(['feat', 'issue', 'refactor']));
+check(
+  'the user prompt asks for a Trellis card only when structured',
+  /Trellis 任务书/.test(H.buildUserPrompt('写个周报', 'feat')) && !/Trellis 任务书/.test(H.buildUserPrompt('写个周报', 'native')),
+);
+
 check('user prompt fences the draft', H.buildUserPrompt('建模一架直升机').includes('<原始需求>\n建模一架直升机\n</原始需求>'));
 
 const local = H.hardenLocally('  建模一架黑鹰直升机，细节拉满  ');
@@ -160,6 +186,7 @@ function mountHost(llm, config, agentDefaultModel) {
   check('health answers ok', res.statusCode === 200 && body.ok === true, JSON.stringify(body));
   check('health reports the version', body.version === H.VERSION, JSON.stringify(body));
   check('health lists the three flavours', Array.isArray(body.styles) && body.styles.join(',') === 'hard,team,cool', JSON.stringify(body.styles));
+  check('health lists the task-card shapes', Array.isArray(body.presets) && body.presets.join(',') === 'native,feat,issue,refactor', JSON.stringify(body.presets));
 }
 
 // --- POST /optimize, happy path -------------------------------------------
@@ -185,6 +212,22 @@ function mountHost(llm, config, agentDefaultModel) {
   check('the model call sets a sampling ceiling', call.maxTokens === H.DEFAULTS.maxTokens && typeof call.temperature === 'number');
   check('the model call declares its purpose', call.purpose === 'prompt-optimizer');
   check('the model call carries an abort signal', call.signal instanceof AbortSignal);
+}
+
+// --- POST /optimize, Trellis preset ---------------------------------------
+{
+  const llm = fakeLlm([
+    { type: 'text-delta', index: 0, text: '## 任务：周报\n## 复现步骤\n先跑一遍' },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]);
+  const handler = mountHost(llm, undefined);
+  const res = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '周报坏了', style: 'hard', preset: 'issue' })), res);
+  const body = res.json();
+  const call = llm.record.calls[0];
+  check('optimize accepts the preset', body.ok === true && body.preset === 'issue', JSON.stringify({ preset: body.preset }));
+  check('the preset reaches the system prompt', /workType: issue/.test(call.system), String(call.system).slice(0, 40));
+  check('the preset reaches the user prompt', /Trellis 任务书/.test(call.messages[0].content[0].text), 'user prompt');
 }
 
 // --- POST /optimize, output hygiene ---------------------------------------
@@ -405,9 +448,9 @@ check(
 );
 check(
   'the request body carries the picked flavour',
-  JSON.stringify(clientExports.postBody('写个周报', 'team', 'zh-CN')) ===
-    JSON.stringify({ text: '写个周报', style: 'team', locale: 'zh-CN' }),
-  JSON.stringify(clientExports.postBody('x', 'team', 'zh-CN')),
+  JSON.stringify(clientExports.postBody('写个周报', 'team', 'feat', 'zh-CN')) ===
+    JSON.stringify({ text: '写个周报', style: 'team', preset: 'feat', locale: 'zh-CN' }),
+  JSON.stringify(clientExports.postBody('x', 'team', 'feat', 'zh-CN')),
 );
 check('an unknown flavour travels as hard', clientExports.postBody('x', 'nope', '').style === 'hard');
 check('the body omits an empty locale', clientExports.postBody('x', 'hard', '').locale === undefined);
@@ -472,7 +515,7 @@ check(
   let cursor = 0;
   const stateReact = {
     useState: (initial) => {
-      const value = cursor < preset.length ? preset[cursor] : initial;
+      const value = cursor < preset.length ? preset[cursor] : (typeof initial === 'function' ? initial() : initial);
       cursor += 1;
       return [value, () => {}];
     },
@@ -516,9 +559,40 @@ check(
     chips.every((chip) => typeof chip.props.onClick === 'function'),
   );
   check(
-    'the menu is three chips and nothing else',
-    picker.props.children.length === 3 && picker.props.children.every((child) => child.props.className === 'dshPo_chip'),
+    'the menu is two groups in one row',
+    picker.props.children.length === 8 &&
+      picker.props.children.filter((child) => child.props.className === 'dshPo_chip').length === 7 &&
+      picker.props.children[3].props.className === 'dshPo_sep',
     String(picker.props.children.length),
+  );
+  const presetChips = picker.props.children.filter((child) => child.props['data-preset'] !== undefined);
+  check(
+    'the shape chips are native, feat, issue, refactor in that order',
+    presetChips.map((chip) => chip.props['data-preset']).join(',') === 'native,feat,issue,refactor',
+    presetChips.map((chip) => chip.props['data-preset']).join(','),
+  );
+  check(
+    'the shape chips carry the Chinese labels',
+    presetChips.map((chip) => chip.props.children.props.children).join(',') === '原生,需求,缺陷,重构',
+    presetChips.map((chip) => chip.props.children.props.children).join(','),
+  );
+  check(
+    'the highlighted shape is the remembered one',
+    presetChips.filter((chip) => chip.props['data-active'] === 'true').length === 1 &&
+      presetChips.find((chip) => chip.props['data-active'] === 'true').props['data-preset'] === 'native',
+  );
+  check(
+    'a divider separates the two groups',
+    picker.props.children[3].props.className === 'dshPo_sep' &&
+      picker.props.children[3].props['aria-hidden'] === 'true',
+  );
+  check(
+    'the shape chips are wired to their own handler',
+    presetChips.every((chip) => typeof chip.props.onClick === 'function'),
+  );
+  check(
+    'the request body carries the shape',
+    /preset: shape/.test(clientSource) && /preset: 'native'/.test(clientSource) === false,
   );
   check(
     'Escape and an outside click still put the menu away',
@@ -554,7 +628,7 @@ check(
   const stateReact = {
     useState: (initial) => {
       const index = cursor;
-      const value = cursor < preset.length ? preset[cursor] : initial;
+      const value = cursor < preset.length ? preset[cursor] : (typeof initial === 'function' ? initial() : initial);
       cursor += 1;
       return [value, (next) => { calls.push({ index, next }); }];
     },
@@ -585,7 +659,7 @@ check(
   const openReact = {
     useState: (initial) => {
       const index = cursor;
-      const value = cursor < preset.length ? ['idle', '', true, 'hard'][cursor] : initial;
+      const value = cursor < preset.length ? ['idle', '', true, 'hard'][cursor] : (typeof initial === 'function' ? initial() : initial);
       cursor += 1;
       return [value, (next) => { calls.push({ index, next }); }];
     },

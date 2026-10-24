@@ -13,12 +13,15 @@
   .cell{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
   .cap{font-size:11px;letter-spacing:.7px;text-transform:uppercase;opacity:.5}
   .head{font-size:13px;opacity:.65;margin:0 0 -6px 2px}
+  .band.menu{align-items:flex-start;padding:96px 26px 18px}
+  #dsh-po-probe{display:none}
 </style>
 </head>
 <body>
   <div class="head">dsh-prompt-optimizer — real component, real stylesheet, four phases</div>
   <div class="band light" id="light"></div>
   <div class="band dark" id="dark"></div>
+  <div class="band menu dark" id="menu-dark"></div>
 
 <script>
 /* Capture the module the way the shell does. */
@@ -29,8 +32,20 @@ window.__ModuleLoader__ = { load: function (mod) { captured = mod; } };
 <script>
 (function () {
   /* A stub React with just enough hook surface for one static render. */
+  /* A static render cannot fire events, so `statePlan` seeds the hook order
+     (phase, note, picking, style, preset) for the cell currently being built. */
+  var statePlan = null;
+  var stateCursor = 0;
   var React = {
-    useState: function (initial) { return [initial, function () {}]; },
+    useState: function (initial) {
+      if (statePlan !== null && stateCursor < statePlan.length) {
+        var seeded = statePlan[stateCursor];
+        stateCursor += 1;
+        return [seeded, function () {}];
+      }
+      var resolved = typeof initial === 'function' ? initial() : initial;
+      return [resolved, function () {}];
+    },
     useEffect: function () {},
     useRef: function (initial) { return { current: initial }; },
     useCallback: function (fn) { return fn; },
@@ -95,37 +110,55 @@ window.__ModuleLoader__ = { load: function (mod) { captured = mod; } };
     t: undefined,
   };
 
+  function cell(host, caption, plan, decorate) {
+    var box = document.createElement('div');
+    box.className = 'cell';
+    var cap = document.createElement('div');
+    cap.className = 'cap';
+    cap.textContent = caption;
+    box.appendChild(cap);
+
+    /* The REAL exported slot entry, rendered through the stub hooks. */
+    statePlan = plan;
+    stateCursor = 0;
+    var element = client.HardForgeEntry(composerProps);
+    var tree = element.type(element.props);
+    var dom = mount(tree);
+    statePlan = null;
+    if (typeof decorate === 'function') decorate(dom);
+    box.appendChild(dom);
+    host.appendChild(box);
+    return box;
+  }
+
   function build(host) {
     ['idle', 'busy', 'done', 'error'].forEach(function (phase) {
-      var cell = document.createElement('div');
-      cell.className = 'cell';
-      var cap = document.createElement('div');
-      cap.className = 'cap';
-      cap.textContent = phase;
-      cell.appendChild(cap);
-
-      /* The REAL exported slot entry, rendered through the stub hooks. */
-      var element = client.HardForgeEntry(composerProps);
-      var tree = element.type(element.props);
-      var dom = mount(tree);
-      /* One static render cannot advance the hook state, so the phase attribute
-         the component itself sets is applied here to show every state's skin. */
-      var btn = dom.querySelector('.dshPo_btn');
-      btn.setAttribute('data-phase', phase);
-      if (phase === 'done' || phase === 'error') {
-        var note = document.createElement('span');
-        note.className = 'dshPo_note';
-        note.setAttribute('data-phase', phase);
-        note.textContent = phase === 'done' ? '已锻造 · 模型出手' : '连不上宿主，锻造炉没点着火';
-        dom.appendChild(note);
-      }
-      cell.appendChild(dom);
-      host.appendChild(cell);
+      cell(host, phase, null, function (dom) {
+        /* One static render cannot advance the hook state, so the phase attribute
+           the component itself sets is applied here to show every state's skin. */
+        var btn = dom.querySelector('.dshPo_btn');
+        btn.setAttribute('data-phase', phase);
+        if (phase === 'done' || phase === 'error') {
+          var note = document.createElement('span');
+          note.className = 'dshPo_note';
+          note.setAttribute('data-phase', phase);
+          note.textContent = phase === 'done' ? '已锻造 · 模型出手' : '连不上宿主，锻造炉没点着火';
+          dom.appendChild(note);
+        }
+      });
     });
+
+  }
+
+  /* The picker, opened: two chip rows (voice, task card) in its own band so the
+     absolutely-positioned panel has room and is not clipped by the layout. */
+  function buildMenu(host) {
+    cell(host, 'menu · open', ['idle', '', true, 'hard', 'native'], null);
   }
 
   build(document.getElementById('light'));
   build(document.getElementById('dark'));
+  buildMenu(document.getElementById('menu-dark'));
 
   // Machine-readable proof for a headless DOM dump: real engine, real CSS.
   var probe = document.createElement('pre');

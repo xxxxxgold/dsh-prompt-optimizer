@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.2.4';
+const VERSION = '0.3.0';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
@@ -53,6 +53,8 @@ const DEFAULTS = {
   temperature: 0.9,
   /** Flavour of the forged voice: `hard` | `team` | `cool`. */
   style: 'hard',
+  /** Output shape: `native` (one hardened paragraph) or a Trellis task card. */
+  preset: 'native',
   /** When the model route fails, still answer with the deterministic rewrite. */
   localFallback: true,
   /** Concurrent rewrites allowed before the route answers 429. */
@@ -61,6 +63,15 @@ const DEFAULTS = {
 
 /** Accepted `style` values, in the order the README documents them. */
 const STYLES = new Set(['hard', 'team', 'cool']);
+
+/**
+ * Accepted `preset` values: the output *shape*, orthogonal to the voice.
+ *
+ * `native` is the original one-paragraph hardened prompt; the other three emit
+ * a task card that maps onto one Trellis work type.
+ */
+const PRESET_IDS = ['native', 'feat', 'issue', 'refactor'];
+const PRESETS = new Set(PRESET_IDS);
 
 /**
  * Style samples distilled from the reference material the plugin was written
@@ -96,8 +107,70 @@ const STYLE_FLAVOURS = {
  * @param styleHint - deployment-supplied extra voice instruction, may be empty.
  * @returns the complete system prompt text.
  */
-export function buildSystemPrompt(style, styleHint) {
+/**
+ * Task-card skeletons. Each is the section layout the matching Trellis work
+ * type expects, written so the receiving agent can paste the steps straight
+ * into `trellis_task_create`.
+ */
+const PRESET_SKELETONS = {
+  feat: [
+    '## 任务：<一句话标题>',
+    'workType: feat ｜ slug 建议：feat-<MM-DD>-<kebab-短名>',
+    '## 背景与问题',
+    '## 目标 / 非目标',
+    '## 范围：In Scope / Out of Scope',
+    '## 验收标准（每条都能跑或能看）',
+    '## 约束与风险',
+    '## 执行步骤（建任务时直接灌进 steps）',
+    '1. <做什么> ｜ 验收：<可测量> ｜ 验证：<命令或人工>',
+    '## 阶段纪律',
+    'prd → design（等确认）→ impl → review → check；规划期只读，方案未批不许改业务代码。',
+  ],
+  issue: [
+    '## 任务：<一句话标题>',
+    'workType: issue ｜ slug 建议：issue-<MM-DD>-<kebab-短名>',
+    '## 现象',
+    '## 复现步骤',
+    '## 期望 vs 实际',
+    '## 影响范围',
+    '## 证据',
+    '## 根因候选（最多 3 条，按可能性排序）',
+    '## 修复方案',
+    '## 回归验证',
+    '## 阶段纪律',
+    'report → analyze → fix → fix-note；先定位再动手，禁止猜着改。',
+  ],
+  refactor: [
+    '## 任务：<一句话标题>',
+    'workType: refactor ｜ slug 建议：refactor-<MM-DD>-<kebab-短名>',
+    '## 现状扫描（重复 / 耦合 / 热点）',
+    '## 待勾选的候选范围',
+    '## 目标结构',
+    '## 行为不变契约',
+    '## 分批迁移步骤',
+    '1. <做什么> ｜ 验收：<可测量> ｜ 验证：<命令或人工>',
+    '## 阶段纪律',
+    'scan → design（等确认）→ apply → done；一次只动一批，每批自带验证。',
+  ],
+};
+
+/**
+ * Build the system instruction for one rewrite.
+ *
+ * The rules are ordered by authority: information preservation first (a rewrite
+ * that loses a constraint is worse than no rewrite), then voice, then output
+ * hygiene. A non-`native` preset swaps the one-paragraph shape for a Trellis
+ * task card without touching the voice rules, so the two dimensions compose.
+ *
+ * @param style - one of {@link STYLES}; anything else falls back to `hard`.
+ * @param styleHint - deployment-supplied extra voice instruction, may be empty.
+ * @param preset - one of {@link PRESETS}; anything else falls back to `native`.
+ * @returns the complete system prompt text.
+ */
+export function buildSystemPrompt(style, styleHint, preset) {
   const flavour = STYLE_FLAVOURS[STYLES.has(style) ? style : 'hard'].join('\n');
+  const shape = PRESETS.has(preset) ? preset : 'native';
+  const structured = shape !== 'native';
   const lines = [
     '你是「硬汉提示词锻造炉」：把用户交来的原始需求，锻造成一句让肌肉团队立刻想冲的任务指令。',
     '',
@@ -116,18 +189,42 @@ export function buildSystemPrompt(style, styleHint) {
     '- 夸张的紧迫感与激励：「这活儿性命攸关」「干漂亮了哥们谢谢你」。夸张可以，与事实冲突不行。',
     '- 允许糙口语气与错落节奏，读起来要像真人急了。',
     flavour,
-    '',
-    '【结构：锻造后的提示词长什么样】',
-    '- 开头一句动员：哥们式开场 + 说清要干什么。',
-    '- 正文把原文要求写成一串硬指标，自然段配少量短横线清单。',
-    '- 必须补一段自我验收：要求执行者交活儿前按上面的硬指标逐条核对。',
-    '- 结尾一句催命收尾：gogogo / 一次性交付 / 让所有人也硬邦邦。',
-    '',
-    '【输出格式：严格遵守】',
-    '- 只输出锻造后的提示词本身，第一个字就是提示词。',
-    '- 不要前言、不要「以下是」「改写后：」、不要解释、不要点评、不要 Markdown 代码块围栏。',
-    '- 不要在结尾加「如果需要我还可以…」这类客套。',
   ];
+  if (structured) {
+    lines.push(
+      '',
+      '【结构：这次交的是一份能直接开的任务书】',
+      '- 形体是任务书，不是一句话动员：语气照样硬邦邦，但必须分小节、能落地。',
+      '- 小节标题原样照抄下面的骨架，顺序不许改；原文没给的信息，写「待确认」，不许编，也不许把小节删掉。',
+      '- 执行步骤要拆成能并行的批次，每步都必须带「验收」（可测量）和「验证」（命令或人工）两项，缺一个都算没写完。',
+      '- 提示词里必须写明：建任务前先征得用户同意；规划期只读，方案没批不许动业务代码。',
+      '',
+      ...PRESET_SKELETONS[shape],
+      '',
+      '【流程元数据白名单】',
+      '- slug 的短名和日期属于流程元数据，不算编造事实：日期用当天（MM-DD），短名把标题转成 kebab-case 小写英文。',
+      '- 除这两项外，其他事实仍然一条都不许编。',
+      '',
+      '【输出格式：严格遵守】',
+      '- 只输出任务书本身，第一个字就是「## 任务：」。',
+      '- 允许用 ## 小节标题和短横线清单；不许用代码围栏、表格、客套话。',
+      '- 不要前言、不要「以下是」、不要解释、不要点评。',
+    );
+  } else {
+    lines.push(
+      '',
+      '【结构：锻造后的提示词长什么样】',
+      '- 开头一句动员：哥们式开场 + 说清要干什么。',
+      '- 正文把原文要求写成一串硬指标，自然段配少量短横线清单。',
+      '- 必须补一段自我验收：要求执行者交活儿前按上面的硬指标逐条核对。',
+      '- 结尾一句催命收尾：gogogo / 一次性交付 / 让所有人也硬邦邦。',
+      '',
+      '【输出格式：严格遵守】',
+      '- 只输出锻造后的提示词本身，第一个字就是提示词。',
+      '- 不要前言、不要「以下是」「改写后：」、不要解释、不要点评、不要 Markdown 代码块围栏。',
+      '- 不要在结尾加「如果需要我还可以…」这类客套。',
+    );
+  }
   const extra = typeof styleHint === 'string' ? styleHint.trim() : '';
   if (extra !== '') lines.push('', '【本部署追加的口气要求】', extra);
   lines.push('', '【风格样本：只学语气与节奏，不许抄内容】', ...STYLE_SAMPLES);
@@ -139,11 +236,13 @@ export function buildSystemPrompt(style, styleHint) {
  * framing for content.
  *
  * @param text - the user's draft prompt.
+ * @param preset - output shape; non-`native` asks for a task card.
  * @returns the user message text.
  */
-export function buildUserPrompt(text) {
+export function buildUserPrompt(text, preset) {
+  const structured = PRESETS.has(preset) && preset !== 'native';
   return [
-    '把下面这段原始需求锻造成硬汉版提示词。',
+    structured ? '把下面这段原始需求锻造成一份 Trellis 任务书：按系统指令里的骨架填，语气照样硬邦邦。' : '把下面这段原始需求锻造成硬汉版提示词。',
     '原文里的事实一条都不许丢、不许改、不许编新的。',
     '输出里不要出现「原始需求」这四个字或任何标签。',
     '',
@@ -245,6 +344,7 @@ export function normalizeConfig(config) {
     timeoutMs: Math.min(Math.floor(pickNumber('timeoutMs', 1000)), 2 ** 31 - 1),
     temperature: Math.min(Math.max(Number.isFinite(Number(raw.temperature)) ? Number(raw.temperature) : DEFAULTS.temperature, 0), 2),
     style: STYLES.has(raw.style) ? raw.style : DEFAULTS.style,
+    preset: PRESETS.has(raw.preset) ? raw.preset : DEFAULTS.preset,
     styleHint: typeof raw.styleHint === 'string' ? raw.styleHint : '',
     localFallback: raw.localFallback === undefined ? DEFAULTS.localFallback : raw.localFallback !== false,
     maxConcurrent: Math.floor(pickNumber('maxConcurrent', 1)),
@@ -400,6 +500,8 @@ export async function streamRewrite(llm, route, system, user, config) {
         : `model finished with "${String(finish.kind)}"`,
     );
     error.code = typeof failure.code === 'string' && failure.code !== '' ? failure.code : String(finish.kind).toUpperCase();
+    // Keep what already streamed: a truncated answer is still worth shipping.
+    error.partialText = text;
     throw error;
   }
   return text;
@@ -427,11 +529,18 @@ function failureOf(error) {
  * @param config - normalised settings.
  * @param text - the user's draft.
  * @param style - flavour override for this request (optional).
+ * @param preset - output shape override for this request (optional).
  * @returns `{ text, engine, route, ms, warning? }`.
  */
-export async function optimize(ctx, config, text, style) {
+export async function optimize(ctx, config, text, style, preset) {
   const started = Date.now();
   const flavour = STYLES.has(style) ? style : config.style;
+  const shape = PRESETS.has(preset) ? preset : config.preset;
+  const structured = shape !== 'native';
+  // A task card is ~800–1100 characters of Chinese: the one-paragraph budget
+  // would truncate it mid-section, so the structured shapes get a floor.
+  const budget = structured ? Math.max(config.maxTokens, 2400) : config.maxTokens;
+  const request = budget === config.maxTokens ? config : { ...config, maxTokens: budget };
   let warning = null;
   let llm;
   try {
@@ -440,12 +549,12 @@ export async function optimize(ctx, config, text, style) {
     llm = undefined;
   }
   if (llm !== undefined && llm !== null && typeof llm.stream === 'function') {
-    const system = buildSystemPrompt(flavour, config.styleHint);
-    const user = buildUserPrompt(text);
+    const system = buildSystemPrompt(flavour, config.styleHint, shape);
+    const user = buildUserPrompt(text, shape);
     let route = await resolveRoute(ctx, config);
     for (let attempt = 0; attempt < 2 && route !== null; attempt += 1) {
       try {
-        const raw = await streamRewrite(llm, route, system, user, config);
+        const raw = await streamRewrite(llm, route, system, user, request);
         const clean = sanitizeOutput(raw);
         if (clean !== '') {
           return { text: clean, engine: 'llm', route, ms: Date.now() - started };
@@ -454,6 +563,18 @@ export async function optimize(ctx, config, text, style) {
         break;
       } catch (error) {
         warning = failureOf(error);
+        // Truncated but non-empty: ship what arrived instead of dropping a
+        // 12-second answer on the floor and falling back to the envelope.
+        const partial = typeof error === 'object' && error !== null && typeof error.partialText === 'string' ? sanitizeOutput(error.partialText) : '';
+        if (warning.code === 'MAX_TOKENS' && partial !== '') {
+          return {
+            text: partial,
+            engine: 'llm',
+            route,
+            ms: Date.now() - started,
+            warning: { code: 'TRUNCATED', message: '模型输出撞到长度上限，已交付截断前的部分' },
+          };
+        }
         // A stale route is worth exactly one rediscovery.
         const discovered = warning.code === 'NO_ADAPTER' && attempt === 0 ? await resolveRoute(ctx, { ...config, provider: '', model: '' }) : null;
         if (discovered === null || (discovered.provider === route.provider && discovered.model === route.model)) {
@@ -466,6 +587,15 @@ export async function optimize(ctx, config, text, style) {
     if (route === null && warning === null) warning = { code: 'NO_ROUTE', message: '没有可用的模型路由' };
   } else {
     warning = { code: 'NO_LLM', message: '宿主没有可用的 llm 服务' };
+  }
+  if (structured) {
+    // Boundary: a Trellis task card cannot be produced by the deterministic
+    // envelope, and a fake structure is worse than a clear error.
+    const error = new Error(
+      `Trellis 任务书必须由模型生成，当前模型路由不可用（${warning === null ? 'UNKNOWN' : warning.code}）：${warning === null ? '' : warning.message}`,
+    );
+    error.code = 'PRESET_NEEDS_MODEL';
+    throw error;
   }
   if (!config.localFallback) {
     const error = new Error(warning === null ? '优化失败' : warning.message);
@@ -509,6 +639,8 @@ export function apply(ctx, config) {
           version: VERSION,
           style: settings.style,
           styles: [...STYLES],
+          preset: settings.preset,
+          presets: [...PRESET_IDS],
           localFallback: settings.localFallback,
         });
       }
@@ -536,8 +668,10 @@ export function apply(ctx, config) {
       }
       inFlight += 1;
       try {
-        const result = await optimize(ctx, settings, text, payload.style);
-        return sendJson(res, 200, { ok: true, ...result });
+        const usedStyle = STYLES.has(payload.style) ? payload.style : settings.style;
+        const usedPreset = PRESETS.has(payload.preset) ? payload.preset : settings.preset;
+        const result = await optimize(ctx, settings, text, usedStyle, usedPreset);
+        return sendJson(res, 200, { ok: true, style: usedStyle, preset: usedPreset, ...result });
       } finally {
         inFlight -= 1;
       }
@@ -574,6 +708,9 @@ export const __internals = {
   VERSION,
   DEFAULTS,
   STYLES,
+  PRESETS,
+  PRESET_IDS,
+  PRESET_SKELETONS,
   buildSystemPrompt,
   buildUserPrompt,
   hardenLocally,

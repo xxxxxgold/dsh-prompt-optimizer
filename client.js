@@ -82,6 +82,33 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /** The output shapes the host understands, in menu order. */
+    const PRESET_IDS = ['native', 'feat', 'issue', 'refactor'];
+
+    /** Where the last used output shape is remembered. */
+    const PRESET_STORAGE_KEY = 'dsh-prompt-optimizer:preset';
+
+    /** Read the remembered shape; anything unreadable falls back to `native`. */
+    function readStoredPreset() {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return 'native';
+        const saved = localStorage.getItem(PRESET_STORAGE_KEY);
+        return PRESET_IDS.indexOf(saved) === -1 ? 'native' : saved;
+      } catch {
+        return 'native';
+      }
+    }
+
+    /** Remember the chosen shape; blocked storage costs memory, never the run. */
+    function rememberPreset(shape) {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return;
+        localStorage.setItem(PRESET_STORAGE_KEY, shape);
+      } catch {
+        /* quota or privacy mode - the current run still uses the picked shape */
+      }
+    }
+
     /** Remember the chosen flavour; blocked storage costs memory, never the run. */
     function rememberStyle(flavour) {
       try {
@@ -105,7 +132,7 @@ window.__ModuleLoader__.load({
       'button.busy': LABEL,
       'button.done': LABEL,
       'button.error': LABEL,
-      'button.title': '点一下选口味：硬汉 / 肌肉集团 / 雷霆炫酷，选完立刻锻造',
+      'button.title': '点一下选口味与规范：口味 硬汉/肌肉集团/雷霆炫酷，规范 原生/需求/缺陷/重构',
       'button.titleBusy': '正在锻造，别催，马上给你硬的',
       'style.hard': '硬汉',
       'style.team': '肌肉集团',
@@ -113,6 +140,14 @@ window.__ModuleLoader__.load({
       'style.hard.hint': '硬汉直给：短句命令式，强度词管够',
       'style.team.hint': '肌肉集团：拆成能并行的块，各干各的再拼装',
       'style.cool.hint': '雷霆炫酷：拉爆、榨干、细节拉满',
+      'preset.native': '原生',
+      'preset.feat': '需求',
+      'preset.issue': '缺陷',
+      'preset.refactor': '重构',
+      'preset.native.hint': '原生：一句话硬邦邦提示词，选完直接发',
+      'preset.feat.hint': '需求：Trellis feat 任务书，prd→design→impl→review→check',
+      'preset.issue.hint': '缺陷：Trellis issue 报告，report→analyze→fix→fix-note',
+      'preset.refactor.hint': '重构：Trellis refactor 扫描，scan→design→apply→done',
       'state.empty': '输入框是空的，先写点东西哥们',
       'state.inputTooLong': '太长了，超过上限，砍短点再来',
       'state.busy': '同时锻造的人太多，等两秒再点',
@@ -127,7 +162,7 @@ window.__ModuleLoader__.load({
       'button.busy': LABEL,
       'button.done': LABEL,
       'button.error': LABEL,
-      'button.title': 'Pick a flavour — hard / team / cool — and forge',
+      'button.title': 'Pick a flavour and a shape — hard/team/cool · plain/feat/issue/refactor',
       'button.titleBusy': 'Forging — hold on, it will come out hard',
       'style.hard': 'hard',
       'style.team': 'team',
@@ -135,6 +170,14 @@ window.__ModuleLoader__.load({
       'style.hard.hint': 'Hard-boiled: clipped commands, plenty of force',
       'style.team.hint': 'Muscle crew: split into parallel chunks, then bolt together',
       'style.cool.hint': 'Thunder-cool: crank it up, wring it out, every detail',
+      'preset.native': 'plain',
+      'preset.feat': 'feat',
+      'preset.issue': 'issue',
+      'preset.refactor': 'refactor',
+      'preset.native.hint': 'Plain: one hardened paragraph, ready to send',
+      'preset.feat.hint': 'Feat: Trellis feat task card, prd→design→impl→review→check',
+      'preset.issue.hint': 'Issue: Trellis issue report, report→analyze→fix→fix-note',
+      'preset.refactor.hint': 'Refactor: Trellis refactor scan, scan→design→apply→done',
       'state.empty': 'The input is empty — write something first, buddy',
       'state.inputTooLong': 'Too long for the forge; trim it and try again',
       'state.busy': 'Too many people forging right now — try again in a second',
@@ -219,7 +262,7 @@ window.__ModuleLoader__.load({
       // Flavour picker: opens upward from the pill, three chips in ONE row.
       '.dshPo_root{position:relative}',
       '.dshPo_pick{position:absolute;bottom:calc(100% + 8px);left:0;z-index:40;display:flex;flex-direction:row;flex-wrap:nowrap;',
-      'gap:6px;width:max-content;max-width:min(92vw,560px);overflow-x:auto;overflow-y:hidden;padding:6px;border-radius:14px;',
+      'gap:6px;width:max-content;max-width:min(94vw,660px);overflow-x:auto;overflow-y:hidden;padding:6px;border-radius:14px;',
       'border:1px solid rgba(255,106,0,.28);',
       'background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-base,#1c1d21));',
       'box-shadow:0 10px 30px rgba(0,0,0,.34),0 0 0 1px rgba(255,255,255,.04),0 0 22px rgba(255,90,0,.14)}',
@@ -231,6 +274,7 @@ window.__ModuleLoader__.load({
       '.dshPo_chip:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
       '.dshPo_chip[data-active=true]{background:linear-gradient(135deg,rgba(255,106,0,.20),rgba(168,85,247,.18));border-color:rgba(255,106,0,.44)}',
       '.dshPo_chipName{font-size:var(--dsh-content-font-size-secondary,13px);font-weight:700;letter-spacing:.3px}',
+      '.dshPo_sep{flex:0 0 auto;width:1px;align-self:stretch;margin:2px 1px;border-radius:1px;background:rgba(255,106,0,.30)}',
       // The transient one-line result note beside the pill.
       '.dshPo_note{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
       'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -287,9 +331,10 @@ window.__ModuleLoader__.load({
      * The request body for one forge. The flavour always travels with the call,
      * so the host never has to fall back to the deployment config.
      */
-    function postBody(text, flavour, locale) {
+    function postBody(text, flavour, preset, locale) {
       const picked = STYLE_IDS.indexOf(flavour) === -1 ? 'hard' : flavour;
-      const body = { text, style: picked };
+      const shape = PRESET_IDS.indexOf(preset) === -1 ? 'native' : preset;
+      const body = { text, style: picked, preset: shape };
       if (typeof locale === 'string' && locale !== '') body.locale = locale;
       return body;
     }
@@ -332,6 +377,7 @@ window.__ModuleLoader__.load({
       const [note, setNote] = react.useState('');
       const [picking, setPicking] = react.useState(false);
       const [style, setStyle] = react.useState(() => readStoredStyle());
+      const [preset, setPreset] = react.useState(() => readStoredPreset());
       const abortRef = react.useRef(null);
       // The pill and its menu share one positioned root; the menu is a sibling
       // so the pill stays mounted (and keeps focus) while the menu is open.
@@ -402,7 +448,7 @@ window.__ModuleLoader__.load({
       const empty = typeof draft !== 'string' || draft.trim() === '';
       const busy = phase === 'busy';
 
-      const run = react.useCallback(async (flavour) => {
+      const run = react.useCallback(async (flavour, shape) => {
         const text = typeof draft === 'string' ? draft : '';
         if (text.trim() === '' || busy) return;
         const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -413,7 +459,7 @@ window.__ModuleLoader__.load({
           const response = await fetch(ENDPOINT, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(postBody(text, flavour, typeof navigator !== 'undefined' ? navigator.language : undefined)),
+            body: JSON.stringify(postBody(text, flavour, shape, typeof navigator !== 'undefined' ? navigator.language : undefined)),
             signal: controller === null ? undefined : controller.signal,
           });
           let body = null;
@@ -463,17 +509,27 @@ window.__ModuleLoader__.load({
         setPicking((open) => !open);
       };
 
-      const choose = (flavour) => {
+      const forge = (flavour, shape) => {
         setPicking(false);
-        setStyle(flavour);
-        rememberStyle(flavour);
         if (empty) {
-          // Picked a flavour with nothing to forge: say so instead of going quiet.
+          // Picked something with nothing to forge: say so instead of going quiet.
           setNote(translate('state.empty'));
           setPhase('error');
           return;
         }
-        void run(flavour);
+        void run(flavour, shape);
+      };
+
+      const choose = (flavour) => {
+        setStyle(flavour);
+        rememberStyle(flavour);
+        forge(flavour, preset);
+      };
+
+      const choosePreset = (shape) => {
+        setPreset(shape);
+        rememberPreset(shape);
+        forge(style, shape);
       };
 
       // One control, two faces: the pill never leaves the row, the menu floats
@@ -494,29 +550,34 @@ window.__ModuleLoader__.load({
         children: [jsx('span', { className: 'dshPo_shine', 'aria-hidden': 'true' }), jsx('span', { className: 'dshPo_label', children: label })],
       });
 
+      const chip = (group, id) => {
+        const active = group === 'style' ? style === id : preset === id;
+        return jsxs('button', {
+          type: 'button',
+          key: group + ':' + id,
+          className: 'dshPo_chip',
+          'data-group': group,
+          'data-value': id,
+          'data-style': group === 'style' ? id : undefined,
+          'data-preset': group === 'preset' ? id : undefined,
+          'data-active': active ? 'true' : 'false',
+          role: 'menuitemradio',
+          'aria-checked': active ? 'true' : 'false',
+          title: translate(group + '.' + id + '.hint'),
+          onClick: () => (group === 'style' ? choose(id) : choosePreset(id)),
+          children: jsx('span', { className: 'dshPo_chipName', children: translate(group + '.' + id) }),
+        });
+      };
+
       const menu = picking
         ? jsxs('span', {
             className: 'dshPo_pick',
             role: 'menu',
             'data-dsh-prompt-optimizer': 'picker',
             children: [
-              ...STYLE_IDS.map((id) =>
-                jsxs(
-                  'button',
-                  {
-                    type: 'button',
-                    key: id,
-                    className: 'dshPo_chip',
-                    'data-style': id,
-                    'data-active': style === id ? 'true' : 'false',
-                    role: 'menuitemradio',
-                    'aria-checked': style === id ? 'true' : 'false',
-                    title: translate('style.' + id + '.hint'),
-                    onClick: () => choose(id),
-                    children: jsx('span', { className: 'dshPo_chipName', children: translate('style.' + id) }),
-                  },
-                ),
-              ),
+              ...STYLE_IDS.map((id) => chip('style', id)),
+              jsx('span', { className: 'dshPo_sep', 'aria-hidden': 'true' }),
+              ...PRESET_IDS.map((id) => chip('preset', id)),
             ],
           })
         : null;
@@ -648,6 +709,10 @@ window.__ModuleLoader__.load({
     exports.LABEL = LABEL;
     exports.STYLE_IDS = STYLE_IDS;
     exports.STYLE_STORAGE_KEY = STYLE_STORAGE_KEY;
+    exports.PRESET_IDS = PRESET_IDS;
+    exports.PRESET_STORAGE_KEY = PRESET_STORAGE_KEY;
+    exports.readStoredPreset = readStoredPreset;
+    exports.rememberPreset = rememberPreset;
     exports.readStoredStyle = readStoredStyle;
     exports.rememberStyle = rememberStyle;
     exports.postBody = postBody;
