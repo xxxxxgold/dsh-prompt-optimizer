@@ -159,6 +159,7 @@ function mountHost(llm, config, agentDefaultModel) {
   const body = res.json();
   check('health answers ok', res.statusCode === 200 && body.ok === true, JSON.stringify(body));
   check('health reports the version', body.version === H.VERSION, JSON.stringify(body));
+  check('health lists the three flavours', Array.isArray(body.styles) && body.styles.join(',') === 'hard,team,cool', JSON.stringify(body.styles));
 }
 
 // --- POST /optimize, happy path -------------------------------------------
@@ -384,6 +385,102 @@ check('entry mounts the button once the props exist', withProps !== null && type
   const button = rendered.props.children[0];
   const visible = flatText(button);
   check('rendered button text is exactly the pinned label', visible === '\u2642harden', JSON.stringify(visible));
+}
+
+// --- the flavour picker ----------------------------------------------------
+check(
+  'client knows exactly the three flavours',
+  Array.isArray(clientExports.STYLE_IDS) && clientExports.STYLE_IDS.join(',') === 'hard,team,cool',
+  JSON.stringify(clientExports.STYLE_IDS),
+);
+check(
+  'dictionaries name every flavour in both locales',
+  ['hard', 'team', 'cool'].every(
+    (id) =>
+      typeof clientExports.zh['style.' + id] === 'string' &&
+      typeof clientExports.en['style.' + id] === 'string' &&
+      typeof clientExports.zh['style.' + id + '.hint'] === 'string' &&
+      typeof clientExports.en['style.' + id + '.hint'] === 'string',
+  ),
+);
+check(
+  'the request body carries the picked flavour',
+  JSON.stringify(clientExports.postBody('写个周报', 'team', 'zh-CN')) ===
+    JSON.stringify({ text: '写个周报', style: 'team', locale: 'zh-CN' }),
+  JSON.stringify(clientExports.postBody('x', 'team', 'zh-CN')),
+);
+check('an unknown flavour travels as hard', clientExports.postBody('x', 'nope', '').style === 'hard');
+check('the body omits an empty locale', clientExports.postBody('x', 'hard', '').locale === undefined);
+check('storage-less hosts fall back to hard', clientExports.readStoredStyle() === 'hard');
+check(
+  'stylesheet styles the flavour menu',
+  /\.dshPo_pick\{/.test(clientExports.CSS) && /\.dshPo_chip\{/.test(clientExports.CSS) && /\.dshPo_cancel\{/.test(clientExports.CSS),
+);
+
+// Render the open menu: the same factory loaded again, with a stateful React
+// stub whose useState yields `picking = true` on the component's third call.
+{
+  let captured = null;
+  const box = {
+    console,
+    setTimeout,
+    clearTimeout,
+    AbortController,
+    Symbol,
+    navigator: { language: 'zh-CN' },
+    document: {
+      querySelector: () => null,
+      createElement: () => ({ dataset: {}, textContent: '' }),
+      head: { appendChild: () => {} },
+    },
+  };
+  box.window = { __ModuleLoader__: { load: (mod) => { captured = mod; } } };
+  box.globalThis = box;
+  vm.createContext(box);
+  vm.runInContext(clientSource, box, { filename: 'client.js' });
+  // useState order inside HardForge: phase, note, picking, style.
+  const preset = ['idle', '', true, 'cool'];
+  let cursor = 0;
+  const stateReact = {
+    useState: (initial) => {
+      const value = cursor < preset.length ? preset[cursor] : initial;
+      cursor += 1;
+      return [value, () => {}];
+    },
+    useEffect: () => {},
+    useRef: (initial) => ({ current: initial }),
+    useCallback: (callback) => callback,
+  };
+  const mod = captured.factory((specifier) => {
+    if (specifier === 'react') return stateReact;
+    if (specifier === 'react/jsx-runtime') return jsxRuntimeStub;
+    throw new Error('unexpected require: ' + specifier);
+  });
+  const tree = mod.HardForge({ useInput: () => '写个周报', inputActions: { setDraft: () => {} }, t: undefined });
+  const picker = tree.props.children[0];
+  const chips = (picker.props.children || []).filter(
+    (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
+  );
+  check(
+    'clicking the pill reveals three flavour chips',
+    picker.props['data-dsh-prompt-optimizer'] === 'picker' && chips.length === 3,
+    String(chips.length),
+  );
+  check(
+    'the chips are hard, team, cool in that order',
+    chips.map((chip) => chip.props['data-style']).join(',') === 'hard,team,cool',
+    chips.map((chip) => chip.props['data-style']).join(','),
+  );
+  check(
+    'the remembered flavour is the one highlighted',
+    chips.filter((chip) => chip.props['data-active'] === 'true').length === 1 &&
+      chips.find((chip) => chip.props['data-active'] === 'true').props['data-style'] === 'cool',
+  );
+  check(
+    'each chip is wired to pick its own flavour',
+    chips.every((chip) => typeof chip.props.onClick === 'function'),
+  );
+  check('the menu can always be dismissed', picker.props.children[picker.props.children.length - 1].props.className === 'dshPo_cancel');
 }
 
 // --- mounting the client plugin -------------------------------------------

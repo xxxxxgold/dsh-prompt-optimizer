@@ -3,9 +3,13 @@
  *
  * One compact control in the composer's tool row (`conversation.input.left`):
  *
- *   click → the draft in the input box is sent to this package's host half,
- *           forged into a hard-boiled prompt, and written straight back into
+ *   click → a small menu opens with the three flavours (`hard` / `team` /
+ *           `cool`); picking one sends the draft to this package's host half,
+ *           forges it in that voice, and writes the result straight back into
  *           the editor via the composer's own `inputActions.setDraft`.
+ *
+ * The flavour therefore lives where the click happens, not in the deployment
+ * config: `config.style` stays as the remembered/fallback default only.
  *
  * ## Bundle shape
  *
@@ -59,6 +63,36 @@ window.__ModuleLoader__.load({
     const CSS_TAG = 'dsh-prompt-optimizer/HardForge.css';
 
     // ---------------------------------------------------------------------
+    // Flavour choice — lives on the button, remembered between clicks
+    // ---------------------------------------------------------------------
+    /** The three flavours the host understands, in menu order. */
+    const STYLE_IDS = ['hard', 'team', 'cool'];
+
+    /** Where the last used flavour is remembered. */
+    const STYLE_STORAGE_KEY = 'dsh-prompt-optimizer:style';
+
+    /** Read the remembered flavour; anything unreadable falls back to `hard`. */
+    function readStoredStyle() {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return 'hard';
+        const saved = localStorage.getItem(STYLE_STORAGE_KEY);
+        return STYLE_IDS.indexOf(saved) === -1 ? 'hard' : saved;
+      } catch {
+        return 'hard';
+      }
+    }
+
+    /** Remember the chosen flavour; blocked storage costs memory, never the run. */
+    function rememberStyle(flavour) {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return;
+        localStorage.setItem(STYLE_STORAGE_KEY, flavour);
+      } catch {
+        /* quota or privacy mode — the current run still uses the picked flavour */
+      }
+    }
+
+    // ---------------------------------------------------------------------
     // Dictionaries
     // ---------------------------------------------------------------------
     /**
@@ -71,8 +105,15 @@ window.__ModuleLoader__.load({
       'button.busy': LABEL,
       'button.done': LABEL,
       'button.error': LABEL,
-      'button.title': '把输入框里的提示词锻造成硬邦邦的肌肉版（点一下就开干）',
+      'button.title': '点一下选口味：hard / team / cool，选完立刻锻造',
       'button.titleBusy': '正在锻造，别催，马上给你硬的',
+      'style.hard': 'hard',
+      'style.team': 'team',
+      'style.cool': 'cool',
+      'style.hard.hint': '硬汉直给：短句命令式，强度词管够',
+      'style.team.hint': '肌肉集团：拆成能并行的块，各干各的再拼装',
+      'style.cool.hint': '雷霆炫酷：拉爆、榨干、细节拉满',
+      'style.cancel': '收起口味菜单',
       'state.empty': '输入框是空的，先写点东西哥们',
       'state.inputTooLong': '太长了，超过上限，砍短点再来',
       'state.busy': '同时锻造的人太多，等两秒再点',
@@ -87,8 +128,15 @@ window.__ModuleLoader__.load({
       'button.busy': LABEL,
       'button.done': LABEL,
       'button.error': LABEL,
-      'button.title': 'Forge the draft into a hard-boiled prompt (one click, go)',
+      'button.title': 'Pick a flavour — hard / team / cool — and forge',
       'button.titleBusy': 'Forging — hold on, it will come out hard',
+      'style.hard': 'hard',
+      'style.team': 'team',
+      'style.cool': 'cool',
+      'style.hard.hint': 'Hard-boiled: clipped commands, plenty of force',
+      'style.team.hint': 'Muscle crew: split into parallel chunks, then bolt together',
+      'style.cool.hint': 'Thunder-cool: crank it up, wring it out, every detail',
+      'style.cancel': 'Close the flavour menu',
       'state.empty': 'The input is empty — write something first, buddy',
       'state.inputTooLong': 'Too long for the forge; trim it and try again',
       'state.busy': 'Too many people forging right now — try again in a second',
@@ -170,6 +218,28 @@ window.__ModuleLoader__.load({
       '@keyframes dshPoPop{0%{transform:scale(.90)}55%{transform:scale(1.07)}100%{transform:scale(1)}}',
       '@keyframes dshPoShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}',
       '60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}',
+      // Flavour picker: opens upward from the pill, three chips, one cancel.
+      '.dshPo_root{position:relative}',
+      '.dshPo_pick{position:absolute;bottom:calc(100% + 8px);left:0;z-index:40;display:flex;flex-direction:column;gap:2px;',
+      'min-width:210px;padding:6px;border-radius:14px;border:1px solid rgba(255,106,0,.28);',
+      'background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-base,#1c1d21));',
+      'box-shadow:0 10px 30px rgba(0,0,0,.34),0 0 0 1px rgba(255,255,255,.04),0 0 22px rgba(255,90,0,.14)}',
+      '.dshPo_chip{display:flex;align-items:baseline;gap:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid transparent;',
+      'background:transparent;font:inherit;text-align:left;cursor:pointer;color:var(--dsw-alias-label-primary,inherit);',
+      'transition:background .14s ease,border-color .14s ease,transform .1s ease}',
+      '.dshPo_chip:hover{background:rgba(255,106,0,.14);border-color:rgba(255,106,0,.34)}',
+      '.dshPo_chip:active{transform:scale(.985)}',
+      '.dshPo_chip:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
+      '.dshPo_chip[data-active=true]{background:linear-gradient(135deg,rgba(255,106,0,.20),rgba(168,85,247,.18));border-color:rgba(255,106,0,.44)}',
+      '.dshPo_chipName{font-size:var(--dsh-content-font-size-secondary,13px);font-weight:700;letter-spacing:.3px}',
+      '.dshPo_chipHint{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
+      'overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.dshPo_cancel{margin-top:2px;padding:4px 10px;border-radius:8px;border:0;background:transparent;font:inherit;',
+      'font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);cursor:pointer;text-align:left}',
+      '.dshPo_cancel:hover{color:var(--dsw-alias-label-primary,inherit)}',
+      '.dshPo_btn::after{content:"\\25BE";position:relative;z-index:1;margin-left:5px;font-size:9px;opacity:.72;',
+      'transition:transform .16s ease}',
+      '.dshPo_btn[data-open=true]::after{transform:rotate(180deg)}',
       // The transient one-line result note beside the pill.
       '.dshPo_note{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
       'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -222,8 +292,18 @@ window.__ModuleLoader__.load({
       return { ok: false, error: { code: 'BAD_RESPONSE', message: 'HTTP ' + String(status) } };
     }
 
-    /** Locale lookup with a per-key fallback so one missing key never blanks the UI. */
-    function translator(t) {
+    /**
+     * The request body for one forge. The flavour always travels with the call,
+     * so the host never has to fall back to the deployment config.
+     */
+    function postBody(text, flavour, locale) {
+      const picked = STYLE_IDS.indexOf(flavour) === -1 ? 'hard' : flavour;
+      const body = { text, style: picked };
+      if (typeof locale === 'string' && locale !== '') body.locale = locale;
+      return body;
+    }
+
+    /** Locale lookup with a per-key fallback so one missing key never blanks the UI. */    function translator(t) {
       const dict = typeof navigator !== 'undefined' && typeof navigator.language === 'string' && navigator.language.toLowerCase().startsWith('zh') ? zh : en;
       return (key) => {
         if (typeof t === 'function') {
@@ -258,6 +338,8 @@ window.__ModuleLoader__.load({
       );
       const [phase, setPhase] = react.useState('idle');
       const [note, setNote] = react.useState('');
+      const [picking, setPicking] = react.useState(false);
+      const [style, setStyle] = react.useState(readStoredStyle());
       const abortRef = react.useRef(null);
 
       // Abandon one in-flight rewrite when the entry unmounts, and clear the
@@ -284,11 +366,29 @@ window.__ModuleLoader__.load({
         return () => clearTimeout(timer);
       }, [phase]);
 
+      // Esc backs out of the flavour menu; the cancel chip is the pointer path.
+      react.useEffect(() => {
+        if (!picking) return undefined;
+        const onKey = (event) => {
+          if (event !== null && typeof event === 'object' && event.key === 'Escape') setPicking(false);
+        };
+        try {
+          if (typeof document !== 'undefined' && document !== null && typeof document.addEventListener === 'function') {
+            document.addEventListener('keydown', onKey);
+            return () => document.removeEventListener('keydown', onKey);
+          }
+        } catch {
+          /* no document: the cancel chip is the way out */
+        }
+        return undefined;
+      }, [picking]);
+
       const empty = typeof draft !== 'string' || draft.trim() === '';
       const busy = phase === 'busy';
 
-      const run = react.useCallback(async () => {
+      const run = react.useCallback(async (flavour) => {
         const text = typeof draft === 'string' ? draft : '';
+        const picked = STYLE_IDS.indexOf(flavour) === -1 ? 'hard' : flavour;
         if (text.trim() === '' || busy) return;
         const controller = typeof AbortController === 'function' ? new AbortController() : null;
         abortRef.current = controller;
@@ -298,7 +398,7 @@ window.__ModuleLoader__.load({
           const response = await fetch(ENDPOINT, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text, locale: typeof navigator !== 'undefined' ? navigator.language : undefined }),
+            body: JSON.stringify(postBody(text, picked, typeof navigator !== 'undefined' ? navigator.language : undefined)),
             signal: controller === null ? undefined : controller.signal,
           });
           let body = null;
@@ -339,23 +439,82 @@ window.__ModuleLoader__.load({
 
       // The visible text is pinned in every state: `♂harden`, verbatim.
       const label = LABEL;
-      const title = busy ? translate('button.titleBusy') : empty ? translate('state.empty') : translate('button.title');
+      const title = busy
+        ? translate('button.titleBusy')
+        : empty
+          ? translate('state.empty')
+          : translate('button.title');
+
+      const openPicker = () => {
+        if (empty || busy) return;
+        setPicking(!picking);
+      };
+
+      const choose = (flavour) => {
+        setPicking(false);
+        setStyle(flavour);
+        rememberStyle(flavour);
+        void run(flavour);
+      };
+
+      // Two faces of one control: the pill, and the flavour menu it opens.
+      // Both are a single element at index 0 so the slot layout never shifts.
+      const control = picking
+        ? jsxs('span', {
+            className: 'dshPo_pick',
+            role: 'menu',
+            'data-dsh-prompt-optimizer': 'picker',
+            children: [
+              ...STYLE_IDS.map((id) =>
+                jsxs(
+                  'button',
+                  {
+                    type: 'button',
+                    key: id,
+                    className: 'dshPo_chip',
+                    'data-style': id,
+                    'data-active': style === id ? 'true' : 'false',
+                    role: 'menuitemradio',
+                    'aria-checked': style === id ? 'true' : 'false',
+                    title: translate('style.' + id + '.hint'),
+                    onClick: () => choose(id),
+                    children: [
+                      jsx('span', { className: 'dshPo_chipName', children: translate('style.' + id) }),
+                      jsx('span', { className: 'dshPo_chipHint', children: translate('style.' + id + '.hint') }),
+                    ],
+                  },
+                ),
+              ),
+              jsx('button', {
+                type: 'button',
+                className: 'dshPo_cancel',
+                title: translate('style.cancel'),
+                'aria-label': translate('style.cancel'),
+                onClick: () => setPicking(false),
+                children: '✕',
+              }),
+            ],
+          })
+        : jsxs('button', {
+            type: 'button',
+            className: 'dshPo_btn',
+            'data-phase': phase,
+            'data-open': picking ? 'true' : undefined,
+            disabled: empty || busy,
+            title,
+            'aria-label': busy ? title : label + '：' + title,
+            'aria-busy': busy ? 'true' : undefined,
+            'aria-haspopup': 'menu',
+            'aria-expanded': picking ? 'true' : 'false',
+            onClick: openPicker,
+            children: [jsx('span', { className: 'dshPo_shine', 'aria-hidden': 'true' }), jsx('span', { className: 'dshPo_label', children: label })],
+          });
 
       return jsxs('span', {
         className: 'dshPo_root',
         'data-dsh-prompt-optimizer': 'button',
         children: [
-          jsxs('button', {
-            type: 'button',
-            className: 'dshPo_btn',
-            'data-phase': phase,
-            disabled: empty || busy,
-            title,
-            'aria-label': busy ? title : label + '：' + title,
-            'aria-busy': busy ? 'true' : undefined,
-            onClick: run,
-            children: [jsx('span', { className: 'dshPo_shine', 'aria-hidden': 'true' }), jsx('span', { className: 'dshPo_label', children: label })],
-          }),
+          control,
           note === ''
             ? null
             : jsx('span', {
@@ -474,6 +633,11 @@ window.__ModuleLoader__.load({
     exports.zh = zh;
     exports.en = en;
     exports.LABEL = LABEL;
+    exports.STYLE_IDS = STYLE_IDS;
+    exports.STYLE_STORAGE_KEY = STYLE_STORAGE_KEY;
+    exports.readStoredStyle = readStoredStyle;
+    exports.rememberStyle = rememberStyle;
+    exports.postBody = postBody;
     exports.readResult = readResult;
     exports.translator = translator;
     return module.exports;

@@ -15,7 +15,7 @@
 
 ## 30 秒看懂
 
-DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它：
+DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它，先选口味（`hard` / `team` / `cool`），选完立刻开锻：
 
 ```
 你的草稿  →  模型重写  →  硬汉任务书  →  直接写回输入框
@@ -155,7 +155,7 @@ dsh plugin --profile <你的-profile> add link:D:\dsh-plugins\dsh-prompt-optimiz
 ```powershell
 # 1. 宿主半活着吗？（端口换成你 DSH 的实际端口）
 curl.exe http://127.0.0.1:19387/dsh-prompt-optimizer/health
-# → {"ok":true,"plugin":"dsh-prompt-optimizer","version":"0.1.0","style":"hard","localFallback":true}
+# → {"ok":true,"plugin":"dsh-prompt-optimizer","version":"0.2.0","style":"hard","styles":["hard","team","cool"],"localFallback":true}
 
 # 2. 插件在不在清单里
 dsh plugin --profile <你的-profile> list
@@ -190,11 +190,11 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 ## 怎么用
 
 1. 在对话输入框写你的草稿（多糙都行）。
-2. 点 **`♂harden`**。
+2. 点 **`♂harden`** —— 弹出三个口味，点哪个就用哪个锻。
 3. 等 3~6 秒（按钮进「锻造中」）。
 4. 结果已在输入框里 —— **看完再发**。不满意就 `Ctrl+Z`，编辑器自带撤销。
 
-想换口味：配置里 `style` 改 `hard` / `team` / `cool`，或在 HTTP 调用里带 `"style": "team"`。
+口味就在按钮上选，不用改配置：菜单里高亮的是上次用过的那个（记在 `localStorage`），点 `✕` 或按 `Esc` 收起。想固定默认值，才需要动配置或 HTTP 调用里的 `"style"`。
 
 | 口味 | 侧重 |
 |---|---|
@@ -281,7 +281,7 @@ $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 CI：[`.github/workflows/selftest.yml`](.github/workflows/selftest.yml) 在 Node 18/20/22 上跑自测 + 语法体检。
 
-**验证覆盖**（94 项）：模块名/inject、系统提示词铁律与样本、口味切换、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、props 缺失不渲染、样式表注入与清理。
+**验证覆盖**（107 项）：模块名/inject、系统提示词铁律与样本、口味切换、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、props 缺失不渲染、样式表注入与清理。
 
 其中外观有三道锁：
 

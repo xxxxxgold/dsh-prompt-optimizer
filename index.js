@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
@@ -508,6 +508,7 @@ export function apply(ctx, config) {
           plugin: name,
           version: VERSION,
           style: settings.style,
+          styles: [...STYLES],
           localFallback: settings.localFallback,
         });
       }
