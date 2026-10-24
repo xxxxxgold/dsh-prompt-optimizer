@@ -489,6 +489,96 @@ check(
   check('the menu can always be dismissed', picker.props.children[picker.props.children.length - 1].props.className === 'dshPo_cancel');
 }
 
+// An empty composer must not lock the menu: the pill stays clickable, and a
+// flavour picked with nothing to forge says so instead of going quiet.
+{
+  let captured = null;
+  const box = {
+    console,
+    setTimeout,
+    clearTimeout,
+    AbortController,
+    Symbol,
+    navigator: { language: 'zh-CN' },
+    document: {
+      querySelector: () => null,
+      createElement: () => ({ dataset: {}, textContent: '' }),
+      head: { appendChild: () => {} },
+    },
+  };
+  box.window = { __ModuleLoader__: { load: (mod) => { captured = mod; } } };
+  box.globalThis = box;
+  vm.createContext(box);
+  vm.runInContext(clientSource, box, { filename: 'client.js' });
+
+  const calls = [];
+  const preset = ['idle', '', false, 'hard'];
+  let cursor = 0;
+  const stateReact = {
+    useState: (initial) => {
+      const index = cursor;
+      const value = cursor < preset.length ? preset[cursor] : initial;
+      cursor += 1;
+      return [value, (next) => { calls.push({ index, next }); }];
+    },
+    useEffect: () => {},
+    useRef: (initial) => ({ current: initial }),
+    useCallback: (callback) => callback,
+  };
+  const mod = captured.factory((specifier) => {
+    if (specifier === 'react') return stateReact;
+    if (specifier === 'react/jsx-runtime') return jsxRuntimeStub;
+    throw new Error('unexpected require: ' + specifier);
+  });
+  const tree = mod.HardForge({ useInput: () => '', inputActions: { setDraft: () => {} }, t: undefined });
+  const pill = tree.props.children[0];
+  check(
+    'an empty composer leaves the pill clickable',
+    pill.props.disabled === undefined || pill.props.disabled === false,
+    String(pill.props.disabled),
+  );
+  pill.props.onClick();
+  const toggle = calls.filter((call) => call.index === 2).pop();
+  check(
+    'clicking it opens the menu even when the box is empty',
+    typeof (toggle && toggle.next) === 'function' && toggle.next(false) === true,
+  );
+  // Second render with the menu already open, so the chips exist to be clicked.
+  cursor = 0;
+  const openReact = {
+    useState: (initial) => {
+      const index = cursor;
+      const value = cursor < preset.length ? ['idle', '', true, 'hard'][cursor] : initial;
+      cursor += 1;
+      return [value, (next) => { calls.push({ index, next }); }];
+    },
+    useEffect: () => {},
+    useRef: (initial) => ({ current: initial }),
+    useCallback: (callback) => callback,
+  };
+  const openMod = captured.factory((specifier) => {
+    if (specifier === 'react') return openReact;
+    if (specifier === 'react/jsx-runtime') return jsxRuntimeStub;
+    throw new Error('unexpected require: ' + specifier);
+  });
+  const openTree = openMod.HardForge({ useInput: () => '', inputActions: { setDraft: () => {} }, t: undefined });
+  const chips = (openTree.props.children[1].props.children || []).filter(
+    (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
+  );
+  calls.length = 0;
+  chips[0].props.onClick();
+  check(
+    'picking a flavour on an empty box explains itself',
+    calls.some((call) => call.index === 1 && typeof call.next === 'string' && call.next.length > 0) &&
+      calls.some((call) => call.index === 0 && call.next === 'error'),
+    JSON.stringify(calls.map((call) => call.index + ':' + String(call.next))),
+  );
+  check(
+    'and it still remembers the flavour it picked',
+    calls.some((call) => call.index === 3 && call.next === 'hard'),
+  );
+}
+
 // --- mounting the client plugin -------------------------------------------
 {
   const captured = { slot: null, locale: null, injectedSlot: null, effects: 0 };

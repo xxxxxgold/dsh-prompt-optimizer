@@ -463,14 +463,12 @@ window.__ModuleLoader__.load({
 
       // The visible text is pinned in every state: `♂harden`, verbatim.
       const label = LABEL;
-      const title = busy
-        ? translate('button.titleBusy')
-        : empty
-          ? translate('state.empty')
-          : translate('button.title');
+      // The menu opens whatever the composer holds — an empty box is a reason
+      // not to forge, never a reason to keep the picker shut.
+      const title = busy ? translate('button.titleBusy') : translate('button.title');
 
       const openPicker = () => {
-        if (empty || busy) return;
+        if (busy) return;
         setPicking((open) => !open);
       };
 
@@ -478,6 +476,12 @@ window.__ModuleLoader__.load({
         setPicking(false);
         setStyle(flavour);
         rememberStyle(flavour);
+        if (empty) {
+          // Picked a flavour with nothing to forge: say so instead of going quiet.
+          setNote(translate('state.empty'));
+          setPhase('error');
+          return;
+        }
         void run(flavour);
       };
 
@@ -489,7 +493,7 @@ window.__ModuleLoader__.load({
         className: 'dshPo_btn',
         'data-phase': phase,
         'data-open': picking ? 'true' : 'false',
-        disabled: empty || busy,
+        disabled: busy,
         title,
         'aria-label': busy ? title : label + '：' + title,
         'aria-busy': busy ? 'true' : undefined,
