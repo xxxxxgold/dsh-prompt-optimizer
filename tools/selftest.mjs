@@ -414,7 +414,15 @@ check('the body omits an empty locale', clientExports.postBody('x', 'hard', '').
 check('storage-less hosts fall back to hard', clientExports.readStoredStyle() === 'hard');
 check(
   'stylesheet styles the flavour menu',
-  /\.dshPo_pick\{/.test(clientExports.CSS) && /\.dshPo_chip\{/.test(clientExports.CSS) && /\.dshPo_cancel\{/.test(clientExports.CSS),
+  /\.dshPo_pick\{/.test(clientExports.CSS) && /\.dshPo_chip\{/.test(clientExports.CSS),
+);
+check(
+  'the pill carries no dropdown caret',
+  !/\.dshPo_btn::after/.test(clientExports.CSS) && !/25BE/.test(clientExports.CSS),
+);
+check(
+  'the menu has no close chrome',
+  !/dshPo_cancel/.test(clientExports.CSS),
 );
 
 // Render the open menu: the same factory loaded again, with a stateful React
@@ -486,7 +494,15 @@ check(
     'each chip is wired to pick its own flavour',
     chips.every((chip) => typeof chip.props.onClick === 'function'),
   );
-  check('the menu can always be dismissed', picker.props.children[picker.props.children.length - 1].props.className === 'dshPo_cancel');
+  check(
+    'the menu is three chips and nothing else',
+    picker.props.children.length === 3 && picker.props.children.every((child) => child.props.className === 'dshPo_chip'),
+    String(picker.props.children.length),
+  );
+  check(
+    'Escape and an outside click still put the menu away',
+    /event\.key === 'Escape'/.test(clientSource) && /addEventListener\('pointerdown'/.test(clientSource),
+  );
 }
 
 // An empty composer must not lock the menu: the pill stays clickable, and a

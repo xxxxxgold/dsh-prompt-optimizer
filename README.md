@@ -194,7 +194,7 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 3. 等 3~6 秒（按钮进「锻造中」）。
 4. 结果已在输入框里 —— **看完再发**。不满意就 `Ctrl+Z`，编辑器自带撤销。
 
-口味就在按钮上选，不用改配置：菜单里高亮的是上次用过的那个（记在 `localStorage`），点 `✕`、按 `Esc` 或点菜单外面都能收起。想固定默认值，才需要动配置或 HTTP 调用里的 `"style"`。
+口味就在按钮上选，不用改配置：菜单里高亮的是上次用过的那个（记在 `localStorage`），按 `Esc` 或点菜单外面都能收起。想固定默认值，才需要动配置或 HTTP 调用里的 `"style"`。
 
 | 口味 | 侧重 |
 |---|---|
@@ -268,7 +268,7 @@ POST /dsh-prompt-optimizer/optimize
 git clone https://github.com/asdnmy123/dsh-prompt-optimizer.git
 cd dsh-prompt-optimizer
 
-# 硬规矩：不全绿不许合。零依赖，离线 94 项。
+# 硬规矩：不全绿不许合。零依赖，离线 115 项。
 node tools/selftest.mjs
 
 # 重出按钮截图（真 client.js + 真样式表，无头 Edge）
@@ -281,7 +281,7 @@ $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 CI：[`.github/workflows/selftest.yml`](.github/workflows/selftest.yml) 在 Node 18/20/22 上跑自测 + 语法体检。
 
-**验证覆盖**（107 项）：模块名/inject、系统提示词铁律与样本、口味切换、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、props 缺失不渲染、样式表注入与清理。
+**验证覆盖**（115 项）：模块名/inject、系统提示词铁律与样本、口味切换、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、props 缺失不渲染、样式表注入与清理。
 
 其中外观有三道锁：
 
@@ -308,7 +308,7 @@ index.js                   宿主半：HTTP 面 + 提示词锻造 + 路由/降�
 client.js                  客户端半：♂harden 按钮 + 样式 + 插槽注册
 cordis.patch.yml           挂载声明：往 profile 里插一行 loader
 package.json               dsh.bundle.patch / dsh.client 声明
-tools/selftest.mjs         离线自测（94 项）
+tools/selftest.mjs         离线自测（115 项）
 tools/preview.html         真组件预览 + 计算样式探测
 tools/asar.mjs             Electron ASAR 迷你读取器（本地侦察用）
 preview/harden-button.png  四态截图

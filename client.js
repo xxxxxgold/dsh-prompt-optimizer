@@ -113,7 +113,6 @@ window.__ModuleLoader__.load({
       'style.hard.hint': '硬汉直给：短句命令式，强度词管够',
       'style.team.hint': '肌肉集团：拆成能并行的块，各干各的再拼装',
       'style.cool.hint': '雷霆炫酷：拉爆、榨干、细节拉满',
-      'style.cancel': '收起口味菜单',
       'state.empty': '输入框是空的，先写点东西哥们',
       'state.inputTooLong': '太长了，超过上限，砍短点再来',
       'state.busy': '同时锻造的人太多，等两秒再点',
@@ -136,7 +135,6 @@ window.__ModuleLoader__.load({
       'style.hard.hint': 'Hard-boiled: clipped commands, plenty of force',
       'style.team.hint': 'Muscle crew: split into parallel chunks, then bolt together',
       'style.cool.hint': 'Thunder-cool: crank it up, wring it out, every detail',
-      'style.cancel': 'Close the flavour menu',
       'state.empty': 'The input is empty — write something first, buddy',
       'state.inputTooLong': 'Too long for the forge; trim it and try again',
       'state.busy': 'Too many people forging right now — try again in a second',
@@ -234,12 +232,6 @@ window.__ModuleLoader__.load({
       '.dshPo_chipName{font-size:var(--dsh-content-font-size-secondary,13px);font-weight:700;letter-spacing:.3px}',
       '.dshPo_chipHint{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
       'overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.dshPo_cancel{margin-top:2px;padding:4px 10px;border-radius:8px;border:0;background:transparent;font:inherit;',
-      'font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);cursor:pointer;text-align:left}',
-      '.dshPo_cancel:hover{color:var(--dsw-alias-label-primary,inherit)}',
-      '.dshPo_btn::after{content:"\\25BE";position:relative;z-index:1;margin-left:5px;font-size:9px;opacity:.72;',
-      'transition:transform .16s ease}',
-      '.dshPo_btn[data-open=true]::after{transform:rotate(180deg)}',
       // The transient one-line result note beside the pill.
       '.dshPo_note{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
       'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -370,7 +362,7 @@ window.__ModuleLoader__.load({
         return () => clearTimeout(timer);
       }, [phase]);
 
-      // Esc backs out of the flavour menu; the cancel chip is the pointer path.
+      // Esc backs out of the flavour menu; clicking away is the pointer path.
       react.useEffect(() => {
         if (!picking) return undefined;
         const onKey = (event) => {
@@ -382,7 +374,7 @@ window.__ModuleLoader__.load({
             return () => document.removeEventListener('keydown', onKey);
           }
         } catch {
-          /* no document: the cancel chip is the way out */
+          /* no document: nothing to listen on */
         }
         return undefined;
       }, [picking]);
@@ -403,7 +395,7 @@ window.__ModuleLoader__.load({
             return () => document.removeEventListener('pointerdown', onDown);
           }
         } catch {
-          /* no document: the cancel chip still works */
+          /* no document: no outside clicks to observe */
         }
         return undefined;
       }, [picking]);
@@ -529,14 +521,6 @@ window.__ModuleLoader__.load({
                   },
                 ),
               ),
-              jsx('button', {
-                type: 'button',
-                className: 'dshPo_cancel',
-                title: translate('style.cancel'),
-                'aria-label': translate('style.cancel'),
-                onClick: () => setPicking(false),
-                children: '✕',
-              }),
             ],
           })
         : null;

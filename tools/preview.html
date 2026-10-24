@@ -61,7 +61,9 @@ window.__ModuleLoader__ = { load: function (mod) { captured = mod; } };
     var props = node.props || {};
     Object.keys(props).forEach(function (key) {
       var value = props[key];
-      if (key === 'children' || value === undefined || value === null) return;
+      // React drops `false` attributes (`disabled={false}` renders nothing);
+      // setAttribute would stringify it to "false" and disable the button.
+      if (key === 'children' || value === undefined || value === null || value === false) return;
       if (key === 'className') el.className = value;
       else if (key === 'style' && typeof value === 'object') Object.assign(el.style, value);
       else if (key.slice(0, 2) === 'on' && typeof value === 'function') el.addEventListener(key.slice(2).toLowerCase(), value);
