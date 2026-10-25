@@ -484,12 +484,23 @@ check(
 );
 check(
   'the request body carries the picked flavour',
-  JSON.stringify(clientExports.postBody('写个周报', 'team', 'feat', 'zh-CN')) ===
-    JSON.stringify({ text: '写个周报', style: 'team', preset: 'feat', locale: 'zh-CN' }),
-  JSON.stringify(clientExports.postBody('x', 'team', 'feat', 'zh-CN')),
+  JSON.stringify(clientExports.postBody('写个周报', 'team', 'feat', 'max', 'zh-CN')) ===
+    JSON.stringify({ text: '写个周报', style: 'team', preset: 'feat', reasoningEffort: 'max', locale: 'zh-CN' }),
+  JSON.stringify(clientExports.postBody('x', 'team', 'feat', 'max', 'zh-CN')),
 );
 check('an unknown flavour travels as hard', clientExports.postBody('x', 'nope', '').style === 'hard');
-check('the body omits an empty locale', clientExports.postBody('x', 'hard', '').locale === undefined);
+check('the body omits an empty locale', clientExports.postBody('x', 'hard', '', '', '').locale === undefined);
+check('an empty effort is left out', clientExports.postBody('x', 'hard', 'native', '').reasoningEffort === undefined);
+check('the effort rides along when picked', clientExports.postBody('x', 'hard', 'native', 'low').reasoningEffort === 'low');
+
+const modelOk = clientExports.readModel(
+  { ok: true, provider: 'p', model: 'm', effort: 'max', efforts: [{ id: 'low', name: '低' }, { id: 'max', name: '最高' }] },
+  200,
+);
+check('the model description lists the efforts', modelOk.ok === true && modelOk.efforts.map((e) => e.id).join(',') === 'low,max', JSON.stringify(modelOk));
+check('the model description carries the current effort', modelOk.effort === 'max', modelOk.effort);
+const modelDown = clientExports.readModel({ ok: false, error: { code: 'NO_ROUTE', message: '没路由' } }, 200);
+check('a missing model degrades quietly', modelDown.ok === false && modelDown.efforts.length === 0, JSON.stringify(modelDown));
 check('storage-less hosts fall back to hard', clientExports.readStoredStyle() === 'hard');
 check(
   'stylesheet styles the flavour menu',
@@ -574,7 +585,7 @@ check(
   const pill = tree.props.children[0];
   const picker = tree.props.children[1];
   const row = picker.props.children[0];
-  const forgeButton = picker.props.children[1];
+  const forgeButton = (picker.props.children || []).find((child) => child !== null && child !== undefined && child.props !== undefined && child.props.className === 'dshPo_go');
   const chips = (row.props.children || []).filter(
     (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
   );
@@ -630,6 +641,14 @@ check(
   check(
     'the shape chips are wired to their own handler',
     presetChips.every((chip) => typeof chip.props.onClick === 'function'),
+  );
+  check(
+    'the picker renders the model effort row',
+    /'effort-row'/.test(clientSource) && /data-effort/.test(clientSource) && /MODEL_ENDPOINT/.test(clientSource),
+  );
+  check(
+    'the effort row sits above the forge button',
+    clientSource.indexOf("'effort-row'") > -1 && clientSource.indexOf("'effort-row'") < clientSource.indexOf("className: 'dshPo_go'"),
   );
   check(
     'the request body carries the shape',
@@ -727,7 +746,9 @@ check(
       !calls.some((call) => call.index === 2),
     JSON.stringify(calls.map((call) => call.index + ':' + String(call.next))),
   );
-  const forgeOnEmpty = openMenu.props.children[1].props.onClick;
+  const forgeOnEmpty = (openMenu.props.children || []).find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props.className === 'dshPo_go',
+  ).props.onClick;
   calls.length = 0;
   forgeOnEmpty();
   check(

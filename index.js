@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
@@ -589,6 +589,50 @@ function failureOf(error) {
 }
 
 /**
+ * Describe the route the button will use: which provider/model, which thinking
+ * efforts it advertises, and which one is currently selected.
+ *
+ * The picker uses this to offer the *model's own* effort list instead of a
+ * hard-coded low/high/max trio, and to preselect whatever the deployment is
+ * already running.
+ *
+ * @param ctx - host context.
+ * @param config - normalised settings.
+ * @returns `{ ok, provider, model, effort, efforts }`.
+ */
+export async function describeModel(ctx, config) {
+  const route = await resolveRoute(ctx, config);
+  if (route === null) return { ok: false, error: { code: 'NO_ROUTE', message: '没有可用的模型路由' } };
+  const selected = typeof route.reasoningEffort === 'string' ? route.reasoningEffort : '';
+  let efforts = [];
+  let fallbackEffort = selected;
+  try {
+    const llm = typeof ctx.get === 'function' ? ctx.get('llm') : undefined;
+    if (llm !== undefined && llm !== null && typeof llm.resolveModelInfo === 'function') {
+      const info = await llm.resolveModelInfo(route.provider, route.model);
+      const reasoning = info !== null && info !== undefined ? info.reasoning : undefined;
+      if (reasoning !== null && reasoning !== undefined && Array.isArray(reasoning.efforts)) {
+        efforts = reasoning.efforts
+          .filter((effort) => effort !== null && typeof effort === 'object' && typeof effort.id === 'string' && effort.id !== '')
+          .map((effort) => ({ id: effort.id, name: typeof effort.name === 'string' && effort.name !== '' ? effort.name : effort.id }));
+      }
+      if (reasoning !== null && reasoning !== undefined && typeof reasoning.defaultEffort === 'string' && reasoning.defaultEffort !== '') {
+        fallbackEffort = reasoning.defaultEffort;
+      }
+    }
+  } catch {
+    // An adapter that cannot describe itself simply yields no options.
+  }
+  return {
+    ok: true,
+    provider: route.provider,
+    model: route.model,
+    effort: selected !== '' ? selected : fallbackEffort,
+    efforts,
+  };
+}
+
+/**
  * Run one optimisation: model first, deterministic envelope second.
  *
  * @param ctx - host context.
@@ -596,9 +640,10 @@ function failureOf(error) {
  * @param text - the user's draft.
  * @param style - flavour override for this request (optional).
  * @param preset - output shape override for this request (optional).
+ * @param effort - thinking-effort override for this request (optional).
  * @returns `{ text, engine, route, ms, warning? }`.
  */
-export async function optimize(ctx, config, text, style, preset) {
+export async function optimize(ctx, config, text, style, preset, effort) {
   const started = Date.now();
   const flavour = STYLES.has(style) ? style : config.style;
   const shape = PRESETS.has(preset) ? preset : config.preset;
@@ -619,7 +664,15 @@ export async function optimize(ctx, config, text, style, preset) {
     const system = buildSystemPrompt(flavour, config.styleHint, shape);
     const user = buildUserPrompt(text, shape);
     let route = await resolveRoute(ctx, config);
-    const wantedEffort = config.reasoningEffort !== '' ? config.reasoningEffort : route !== null && typeof route.reasoningEffort === 'string' ? route.reasoningEffort : '';
+    const asked = typeof effort === 'string' ? effort.trim() : '';
+    const wantedEffort =
+      asked !== ''
+        ? asked
+        : config.reasoningEffort !== ''
+          ? config.reasoningEffort
+          : route !== null && typeof route.reasoningEffort === 'string'
+            ? route.reasoningEffort
+            : '';
     if (wantedEffort !== '') request = { ...request, reasoningEffort: wantedEffort };
     for (let attempt = 0; attempt < 2 && route !== null; attempt += 1) {
       try {
@@ -797,6 +850,9 @@ export function apply(ctx, config) {
           text: text.slice(0, 400),
         });
       }
+      if (req.method === 'GET' && route === 'model') {
+        return sendJson(res, 200, await describeModel(ctx, settings));
+      }
       if (req.method !== 'POST' || route !== 'optimize') {
         return sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: `未知路由: ${route}` } });
       }
@@ -823,8 +879,9 @@ export function apply(ctx, config) {
       try {
         const usedStyle = STYLES.has(payload.style) ? payload.style : settings.style;
         const usedPreset = PRESETS.has(payload.preset) ? payload.preset : settings.preset;
-        const result = await optimize(ctx, settings, text, usedStyle, usedPreset);
-        return sendJson(res, 200, { ok: true, style: usedStyle, preset: usedPreset, ...result });
+        const usedEffort = typeof payload.reasoningEffort === 'string' ? payload.reasoningEffort : '';
+        const result = await optimize(ctx, settings, text, usedStyle, usedPreset, usedEffort);
+        return sendJson(res, 200, { ok: true, style: usedStyle, preset: usedPreset, effort: usedEffort || 'inherit', ...result });
       } finally {
         inFlight -= 1;
       }
@@ -866,6 +923,7 @@ export const __internals = {
   PRESET_SKELETONS,
   isThin,
   buildExpandPrompt,
+  describeModel,
   buildSystemPrompt,
   buildUserPrompt,
   hardenLocally,

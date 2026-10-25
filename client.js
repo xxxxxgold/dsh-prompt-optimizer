@@ -57,6 +57,8 @@ window.__ModuleLoader__.load({
     const NS = 'prompt-optimizer';
     /** Host route the button talks to (same origin). */
     const ENDPOINT = '/dsh-prompt-optimizer/optimize';
+    /** Where the picker asks which thinking efforts the current model offers. */
+    const MODEL_ENDPOINT = '/dsh-prompt-optimizer/model';
     /** Registry id of this composer entry. */
     const ENTRY_ID = 'dsh-prompt-optimizer:hard-forge';
     /** Stylesheet identity, tagged like every shipped client bundle stylesheet. */
@@ -135,6 +137,9 @@ window.__ModuleLoader__.load({
       'button.title': '点一下选口味与规范：口味 硬汉/肌肉集团/雷霆炫酷，规范 原生/需求/缺陷/重构',
       'button.titleBusy': '正在锻造，别催，马上给你硬的',
       'button.forge': '开锻',
+      'effort.label': '思考强度',
+      'effort.hint': '这一档思考强度会随请求一起发出去，默认取当前模型配置的那一档',
+      'effort.default': '默认跟随模型',
       'style.hard': '硬汉',
       'style.team': '肌肉集团',
       'style.cool': '雷霆炫酷',
@@ -166,6 +171,9 @@ window.__ModuleLoader__.load({
       'button.title': 'Pick a flavour and a shape — hard/team/cool · plain/feat/issue/refactor',
       'button.titleBusy': 'Forging — hold on, it will come out hard',
       'button.forge': 'Forge',
+      'effort.label': 'Thinking',
+      'effort.hint': 'Sent with the request; defaults to the effort configured on this model',
+      'effort.default': 'model default',
       'style.hard': 'hard',
       'style.team': 'team',
       'style.cool': 'cool',
@@ -279,6 +287,8 @@ window.__ModuleLoader__.load({
       '.dshPo_chipName{font-size:var(--dsh-content-font-size-secondary,13px);font-weight:700;letter-spacing:.3px}',
       '.dshPo_row{display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;align-items:center;overflow-x:auto}',
       '.dshPo_sep{flex:0 0 auto;width:1px;align-self:stretch;margin:2px 1px;border-radius:1px;background:rgba(255,106,0,.30)}',
+      '.dshPo_rowLabel{flex:0 0 auto;font-size:var(--dsh-content-font-size-caption,12px);opacity:.62;letter-spacing:.4px}',
+      '.dshPo_effortDefault{flex:0 0 auto;margin-left:auto;font-size:var(--dsh-content-font-size-caption,12px);opacity:.5}',
       '.dshPo_go{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;',
       'padding:8px 12px;border-radius:10px;border:1px solid rgba(255,106,0,.55);cursor:pointer;font:inherit;font-weight:700;',
       'color:#fff;background:linear-gradient(120deg,#ff6a00,#ff2d55 55%,#a855f7);',
@@ -339,13 +349,40 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Parse the host's model description into `{ ok, effort, efforts }`.
+     *
+     * @param response - parsed JSON body (may be anything).
+     * @param status - HTTP status.
+     * @returns a shape the picker can render without further checks.
+     */
+    function readModel(response, status) {
+      if (response === null || typeof response !== 'object' || response.ok !== true) {
+        const error = response !== null && typeof response === 'object' && response.error !== null && typeof response.error === 'object' ? response.error : null;
+        return { ok: false, effort: '', efforts: [], error: { code: error !== null && typeof error.code === 'string' ? error.code : 'MODEL_UNAVAILABLE', message: textOf(error !== null && error.message !== undefined ? error.message : 'HTTP ' + String(status)) } };
+      }
+      const efforts = Array.isArray(response.efforts)
+        ? response.efforts
+            .filter((item) => item !== null && typeof item === 'object' && typeof item.id === 'string' && item.id !== '')
+            .map((item) => ({ id: item.id, name: typeof item.name === 'string' && item.name !== '' ? item.name : item.id }))
+        : [];
+      return {
+        ok: true,
+        provider: typeof response.provider === 'string' ? response.provider : '',
+        model: typeof response.model === 'string' ? response.model : '',
+        effort: typeof response.effort === 'string' ? response.effort : '',
+        efforts,
+      };
+    }
+
+    /**
      * The request body for one forge. The flavour always travels with the call,
      * so the host never has to fall back to the deployment config.
      */
-    function postBody(text, flavour, preset, locale) {
+    function postBody(text, flavour, preset, effort, locale) {
       const picked = STYLE_IDS.indexOf(flavour) === -1 ? 'hard' : flavour;
       const shape = PRESET_IDS.indexOf(preset) === -1 ? 'native' : preset;
       const body = { text, style: picked, preset: shape };
+      if (typeof effort === 'string' && effort !== '') body.reasoningEffort = effort;
       if (typeof locale === 'string' && locale !== '') body.locale = locale;
       return body;
     }
@@ -389,6 +426,9 @@ window.__ModuleLoader__.load({
       const [picking, setPicking] = react.useState(false);
       const [style, setStyle] = react.useState(() => readStoredStyle());
       const [preset, setPreset] = react.useState(() => readStoredPreset());
+      // Thinking efforts come from the model itself, never from a fixed list.
+      const [efforts, setEfforts] = react.useState([]);
+      const [effort, setEffort] = react.useState('');
       const abortRef = react.useRef(null);
       // The pill and its menu share one positioned root; the menu is a sibling
       // so the pill stays mounted (and keeps focus) while the menu is open.
@@ -459,7 +499,33 @@ window.__ModuleLoader__.load({
       const empty = typeof draft !== 'string' || draft.trim() === '';
       const busy = phase === 'busy';
 
-      const run = react.useCallback(async (flavour, shape) => {
+      // One read of the route on mount: which efforts this model advertises and
+      // which one the deployment is already running.
+      react.useEffect(() => {
+        let alive = true;
+        (async () => {
+          try {
+            const response = await fetch(MODEL_ENDPOINT, { headers: { accept: 'application/json' } });
+            let body = null;
+            try {
+              body = await response.json();
+            } catch {
+              body = null;
+            }
+            const model = readModel(body, response.status);
+            if (!alive || !model.ok) return;
+            setEfforts(model.efforts);
+            if (model.effort !== '') setEffort((current) => (current === '' ? model.effort : current));
+          } catch {
+            /* no description: the picker simply shows no effort row */
+          }
+        })();
+        return () => {
+          alive = false;
+        };
+      }, []);
+
+      const run = react.useCallback(async (flavour, shape, thinking) => {
         const text = typeof draft === 'string' ? draft : '';
         if (text.trim() === '' || busy) return;
         const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -470,7 +536,7 @@ window.__ModuleLoader__.load({
           const response = await fetch(ENDPOINT, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(postBody(text, flavour, shape, typeof navigator !== 'undefined' ? navigator.language : undefined)),
+            body: JSON.stringify(postBody(text, flavour, shape, thinking, typeof navigator !== 'undefined' ? navigator.language : undefined)),
             signal: controller === null ? undefined : controller.signal,
           });
           let body = null;
@@ -530,7 +596,7 @@ window.__ModuleLoader__.load({
           return;
         }
         setPicking(false);
-        void run(style, preset);
+        void run(style, preset, effort);
       };
 
       const choose = (flavour) => {
@@ -594,6 +660,30 @@ window.__ModuleLoader__.load({
                   ...PRESET_IDS.map((id) => chip('preset', id)),
                 ],
               }),
+              efforts.length === 0
+                ? null
+                : jsxs('span', {
+                    className: 'dshPo_row',
+                    'data-dsh-prompt-optimizer': 'effort-row',
+                    children: [
+                      jsx('span', { className: 'dshPo_rowLabel', children: translate('effort.label') }),
+                      ...efforts.map((item) =>
+                        jsxs('button', {
+                          type: 'button',
+                          key: 'effort:' + item.id,
+                          className: 'dshPo_chip',
+                          'data-effort': item.id,
+                          'data-active': effort === item.id ? 'true' : 'false',
+                          role: 'menuitemradio',
+                          'aria-checked': effort === item.id ? 'true' : 'false',
+                          title: translate('effort.hint'),
+                          onClick: () => setEffort(item.id),
+                          children: jsx('span', { className: 'dshPo_chipName', children: item.name }),
+                        }),
+                      ),
+                      jsx('span', { className: 'dshPo_effortDefault', children: translate('effort.default') }),
+                    ],
+                  }),
               jsxs('button', {
                 type: 'button',
                 className: 'dshPo_go',
@@ -729,6 +819,8 @@ window.__ModuleLoader__.load({
     exports.HardForgeEntry = HardForgeEntry;
     exports.NS = NS;
     exports.ENDPOINT = ENDPOINT;
+    exports.MODEL_ENDPOINT = MODEL_ENDPOINT;
+    exports.readModel = readModel;
     exports.ENTRY_ID = ENTRY_ID;
     exports.CSS_TAG = CSS_TAG;
     exports.CSS = CSS;

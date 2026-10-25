@@ -15,7 +15,7 @@
 
 ## 30 秒看懂
 
-DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出一块面板：一行**口味**（`hard` / `team` / `cool`），一行**产出规范**（原生 / 需求 / 缺陷 / 重构），两行随便点、**面板不会关**，选好了再按底下的「**开锻**」：
+DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出一块面板：一行**口味**（`hard` / `team` / `cool`），一行**产出规范**（原生 / 需求 / 缺陷 / 重构），两行随便点、**面板不会关**；下面还有一行**思考强度**，选项和默认值都从当前模型自己的配置里读；选好了再按底下的「**开锻**」：
 
 ```
 你的草稿  →  模型重写  →  硬汉任务书  →  直接写回输入框
@@ -263,6 +263,9 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 同源、无鉴权（与 DSH 其它插件控制面一致）：
 
 ```
+GET  /dsh-prompt-optimizer/model
+     → { ok, provider, model, effort, efforts: [{ id, name }] }   # 当前路由自己声明的思考强度
+
 GET  /dsh-prompt-optimizer/health
      → { ok, plugin, version, style, styles, preset, presets, localFallback }
 
@@ -294,7 +297,7 @@ POST /dsh-prompt-optimizer/probe          # 诊断：原样跑一次模型调用
 git clone https://github.com/asdnmy123/dsh-prompt-optimizer.git
 cd dsh-prompt-optimizer
 
-# 硬规矩：不全绿不许合。零依赖，离线 178 项。
+# 硬规矩：不全绿不许合。零依赖，离线 185 项。
 node tools/selftest.mjs
 
 # 重出按钮截图（真 client.js + 真样式表，无头 Edge）
@@ -307,7 +310,7 @@ $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 CI：[`.github/workflows/selftest.yml`](.github/workflows/selftest.yml) 在 Node 18/20/22 上跑自测 + 语法体检。
 
-**验证覆盖**（178 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
+**验证覆盖**（185 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
 
 其中外观有三道锁：
 
@@ -334,7 +337,7 @@ index.js                   宿主半：HTTP 面 + 提示词锻造 + 路由/降�
 client.js                  客户端半：♂harden 按钮 + 样式 + 插槽注册
 cordis.patch.yml           挂载声明：往 profile 里插一行 loader
 package.json               dsh.bundle.patch / dsh.client 声明
-tools/selftest.mjs         离线自测（178 项）
+tools/selftest.mjs         离线自测（185 项）
 tools/preview.html         真组件预览 + 计算样式探测
 tools/asar.mjs             Electron ASAR 迷你读取器（本地侦察用）
 preview/harden-button.png  四态 + 菜单截图
