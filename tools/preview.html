@@ -33,7 +33,8 @@ window.__ModuleLoader__ = { load: function (mod) { captured = mod; } };
 (function () {
   /* A stub React with just enough hook surface for one static render. */
   /* A static render cannot fire events, so `statePlan` seeds the hook order
-     (phase, note, picking, style, preset) for the cell currently being built. */
+     (phase, note, picking, style, preset, efforts, effort, models, selection,
+     lock, effortSource) for the cell currently being built. */
   var statePlan = null;
   var stateCursor = 0;
   var React = {
@@ -81,6 +82,7 @@ window.__ModuleLoader__ = { load: function (mod) { captured = mod; } };
       if (key === 'children' || value === undefined || value === null || value === false) return;
       if (key === 'className') el.className = value;
       else if (key === 'style' && typeof value === 'object') Object.assign(el.style, value);
+      else if (key === 'value' && node.type === 'select') el.value = String(value);
       else if (key.slice(0, 2) === 'on' && typeof value === 'function') el.addEventListener(key.slice(2).toLowerCase(), value);
       else el.setAttribute(key, String(value));
     });
@@ -150,10 +152,31 @@ window.__ModuleLoader__ = { load: function (mod) { captured = mod; } };
 
   }
 
-  /* The picker, opened: two chip rows (voice, task card) in its own band so the
+  /* The picker, opened: model row + two chip rows in its own band so the
      absolutely-positioned panel has room and is not clipped by the layout. */
   function buildMenu(host) {
-    cell(host, 'menu · open', ['idle', '', true, 'hard', 'native'], null);
+    cell(
+      host,
+      'menu · open',
+      [
+        'idle',
+        '',
+        true,
+        'hard',
+        'native',
+        [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }, { id: 'max', name: 'Max' }],
+        'max',
+        [
+          { provider: 'deepseek-account', providerName: 'DeepSeek 账号', model: 'deepseek-v4.1-flash', name: 'DeepSeek-V4.1-Flash' },
+          { provider: 'deepseek-account', providerName: 'DeepSeek 账号', model: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro' },
+          { provider: 'happycoding', providerName: 'happycoding', model: 'deepseek-v4.1-flash', name: 'deepseek-v4.1-flash' },
+        ],
+        { provider: 'deepseek-account', model: 'deepseek-v4.1-flash', manual: false },
+        null,
+        'model',
+      ],
+      null,
+    );
   }
 
   build(document.getElementById('light'));

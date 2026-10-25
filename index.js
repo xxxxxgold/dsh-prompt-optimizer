@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.6.0';
+const VERSION = '0.6.1';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
@@ -448,9 +448,20 @@ export async function readBody(req, limitBytes) {
  *
  * @param ctx - host context.
  * @param config - normalised settings.
+ * @param override - explicit `{ provider, model }` for this request (optional).
  * @returns a route, or `null` when nothing is usable.
  */
-export async function resolveRoute(ctx, config) {
+export async function resolveRoute(ctx, config, override) {
+  if (
+    override !== null &&
+    typeof override === 'object' &&
+    typeof override.provider === 'string' &&
+    override.provider !== '' &&
+    typeof override.model === 'string' &&
+    override.model !== ''
+  ) {
+    return { provider: override.provider, model: override.model };
+  }
   if (config.provider !== '' && config.model !== '') {
     return { provider: config.provider, model: config.model };
   }
@@ -598,10 +609,11 @@ function failureOf(error) {
  *
  * @param ctx - host context.
  * @param config - normalised settings.
+ * @param override - explicit `{ provider, model }` for this request (optional).
  * @returns `{ ok, provider, model, effort, efforts }`.
  */
-export async function describeModel(ctx, config) {
-  const route = await resolveRoute(ctx, config);
+export async function describeModel(ctx, config, override) {
+  const route = await resolveRoute(ctx, config, override);
   if (route === null) return { ok: false, error: { code: 'NO_ROUTE', message: '没有可用的模型路由' } };
   const selected = typeof route.reasoningEffort === 'string' ? route.reasoningEffort : '';
   let efforts = [];
@@ -633,6 +645,81 @@ export async function describeModel(ctx, config) {
 }
 
 /**
+ * Describe every forge model the host can offer: the current selection plus the
+ * provider/model catalog the `llm` service advertises.
+ *
+ * The picker uses this for its model row. An adapter that cannot enumerate its
+ * models is skipped rather than failing the whole catalog; a host without an
+ * `llm` service simply answers with an empty list.
+ *
+ * @param ctx - host context.
+ * @returns `{ ok, current, models }`.
+ */
+export async function describeModels(ctx) {
+  const soft = (key) => {
+    try {
+      return typeof ctx.get === 'function' ? ctx.get(key) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const defaults = soft('agentDefaultModel');
+  let current = null;
+  if (defaults !== undefined && defaults !== null && typeof defaults.currentSelection === 'function') {
+    try {
+      const selection = defaults.currentSelection();
+      if (
+        selection !== null &&
+        typeof selection === 'object' &&
+        typeof selection.provider === 'string' &&
+        selection.provider !== '' &&
+        typeof selection.model === 'string' &&
+        selection.model !== ''
+      ) {
+        current = { provider: selection.provider, model: selection.model };
+      }
+    } catch {
+      // A broken default model must not stop the catalog.
+    }
+  }
+  const models = [];
+  const llm = soft('llm');
+  if (llm !== undefined && llm !== null && typeof llm.listProviders === 'function') {
+    let providers = [];
+    try {
+      providers = llm.listProviders();
+    } catch {
+      providers = [];
+    }
+    if (Array.isArray(providers)) {
+      for (const provider of providers) {
+        const id = provider !== null && typeof provider === 'object' ? provider.id : undefined;
+        if (typeof id !== 'string' || id === '') continue;
+        const providerName = typeof provider.name === 'string' && provider.name !== '' ? provider.name : id;
+        let list = [];
+        try {
+          list = await llm.listModels(id);
+        } catch {
+          list = [];
+        }
+        if (!Array.isArray(list)) continue;
+        for (const model of list) {
+          const modelId = model !== null && typeof model === 'object' ? model.id : undefined;
+          if (typeof modelId !== 'string' || modelId === '') continue;
+          models.push({
+            provider: id,
+            providerName,
+            model: modelId,
+            name: typeof model.name === 'string' && model.name !== '' ? model.name : modelId,
+          });
+        }
+      }
+    }
+  }
+  return { ok: true, current, models };
+}
+
+/**
  * Run one optimisation: model first, deterministic envelope second.
  *
  * @param ctx - host context.
@@ -641,9 +728,10 @@ export async function describeModel(ctx, config) {
  * @param style - flavour override for this request (optional).
  * @param preset - output shape override for this request (optional).
  * @param effort - thinking-effort override for this request (optional).
+ * @param routeOverride - explicit `{ provider, model }` for this request (optional).
  * @returns `{ text, engine, route, ms, warning? }`.
  */
-export async function optimize(ctx, config, text, style, preset, effort) {
+export async function optimize(ctx, config, text, style, preset, effort, routeOverride) {
   const started = Date.now();
   const flavour = STYLES.has(style) ? style : config.style;
   const shape = PRESETS.has(preset) ? preset : config.preset;
@@ -663,7 +751,7 @@ export async function optimize(ctx, config, text, style, preset, effort) {
   if (llm !== undefined && llm !== null && typeof llm.stream === 'function') {
     const system = buildSystemPrompt(flavour, config.styleHint, shape);
     const user = buildUserPrompt(text, shape);
-    let route = await resolveRoute(ctx, config);
+    let route = await resolveRoute(ctx, config, routeOverride);
     const asked = typeof effort === 'string' ? effort.trim() : '';
     const wantedEffort =
       asked !== ''
@@ -725,8 +813,12 @@ export async function optimize(ctx, config, text, style, preset, effort) {
           warning = null;
           continue;
         }
-        // A stale route is worth exactly one rediscovery.
-        const discovered = warning.code === 'NO_ADAPTER' && attempt === 0 ? await resolveRoute(ctx, { ...config, provider: '', model: '' }) : null;
+        // A stale route is worth exactly one rediscovery — unless the caller
+        // pinned an explicit model, in which case a silent switch is wrong.
+        const discovered =
+          warning.code === 'NO_ADAPTER' && attempt === 0 && (routeOverride === null || routeOverride === undefined)
+            ? await resolveRoute(ctx, { ...config, provider: '', model: '' })
+            : null;
         if (discovered === null || (discovered.provider === route.provider && discovered.model === route.model)) {
           route = null;
         } else {
@@ -851,7 +943,16 @@ export function apply(ctx, config) {
         });
       }
       if (req.method === 'GET' && route === 'model') {
-        return sendJson(res, 200, await describeModel(ctx, settings));
+        const provider = url.searchParams.get('provider');
+        const model = url.searchParams.get('model');
+        const override =
+          typeof provider === 'string' && provider !== '' && typeof model === 'string' && model !== ''
+            ? { provider, model }
+            : null;
+        return sendJson(res, 200, await describeModel(ctx, settings, override));
+      }
+      if (req.method === 'GET' && route === 'models') {
+        return sendJson(res, 200, await describeModels(ctx));
       }
       if (req.method !== 'POST' || route !== 'optimize') {
         return sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: `未知路由: ${route}` } });
@@ -880,7 +981,10 @@ export function apply(ctx, config) {
         const usedStyle = STYLES.has(payload.style) ? payload.style : settings.style;
         const usedPreset = PRESETS.has(payload.preset) ? payload.preset : settings.preset;
         const usedEffort = typeof payload.reasoningEffort === 'string' ? payload.reasoningEffort : '';
-        const result = await optimize(ctx, settings, text, usedStyle, usedPreset, usedEffort);
+        const usedProvider = typeof payload.provider === 'string' && payload.provider !== '' ? payload.provider.slice(0, 200) : '';
+        const usedModel = typeof payload.model === 'string' && payload.model !== '' ? payload.model.slice(0, 200) : '';
+        const routeOverride = usedProvider !== '' && usedModel !== '' ? { provider: usedProvider, model: usedModel } : null;
+        const result = await optimize(ctx, settings, text, usedStyle, usedPreset, usedEffort, routeOverride);
         return sendJson(res, 200, { ok: true, style: usedStyle, preset: usedPreset, effort: usedEffort || 'inherit', ...result });
       } finally {
         inFlight -= 1;
@@ -924,6 +1028,7 @@ export const __internals = {
   isThin,
   buildExpandPrompt,
   describeModel,
+  describeModels,
   buildSystemPrompt,
   buildUserPrompt,
   hardenLocally,

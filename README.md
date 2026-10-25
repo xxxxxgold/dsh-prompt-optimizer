@@ -15,7 +15,7 @@
 
 ## 30 秒看懂
 
-DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出一块面板：一行**口味**（`hard` / `team` / `cool`），一行**产出规范**（原生 / 需求 / 缺陷 / 重构），两行随便点、**面板不会关**；下面还有一行**思考强度**，选项和默认值都从当前模型自己的配置里读；选好了再按底下的「**开锻**」：
+DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出一块面板：最上面一行**模型**（默认当前 DSH 模型，可锁定）；一行**口味**（`hard` / `team` / `cool`），一行**产出规范**（原生 / 需求 / 缺陷 / 重构），两行随便点、**面板不会关**；下面还有一行**思考强度**，挡位从当前模型自己的配置里读，默认取该模型上一次的设定，没有记录才用模型默认；没有思考挡位的模型整行不显示。选好了再按底下的「**开锻**」：
 
 ```
 你的草稿  →  模型重写  →  硬汉任务书  →  直接写回输入框
@@ -63,7 +63,7 @@ DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出�
 |---|---|---|
 | 输入框为空 | 胶囊降透明度 | 仍可点开菜单；点了会提示「输入框是空的，先写点东西哥们」，不发给宿主 |
 | 空闲 | 流动热渐变环（橙→玫红→紫→金）+ 渐变文字 + 静态辉光 | 可点 |
-| 锻造中 | 环流速拉快（1.15s）+ 呼吸辉光 + 高光扫过 + 文字渐变走字 | 禁用防连点；文字仍是 `♂harden` |
+| 锻造中 | 边框跑马灯（conic 光环 1.05s 一圈）+ 环流速拉快（1.15s）+ 呼吸辉光 + 高光扫过 | 禁用防连点；文字仍是 `♂harden` |
 | 成功 | 青绿渐变环 + 一次弹跳 + 常亮绿辉光 | 结果已写回输入框，右侧小字「已锻造 · 模型出手」 |
 | 失败 | 火红渐变环 + 一次抖动 | 右侧小字写原因 |
 
@@ -248,7 +248,7 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 | `preset` | `native` | 产出规范；非法值回落到 `native`。`native` 以外必须够得着模型 |
 | `provider` / `model` | 空 | 显式模型路由。留空则依次试 `ctx.agentDefaultModel` → 适配器目录里第一个有模型的 route |
 | `maxTokens` | `0` | `0` = **不传这个字段**，由模型自己的输出上限/上下文窗口说了算；填正整数才覆盖 |
-| `reasoningEffort` | 空 | 空 = **跟随 `agentDefaultModel` 当前选择的思考强度**；填 `low`/`high`/`max` 才覆盖部署值 |
+| `reasoningEffort` | 空 | 空 = 不强制；界面按「该模型上一次设定 → 模型默认 → 首个挡位」自行决定并随请求发送。填 `low`/`high`/`max` 才强制覆盖 |
 | `temperature` | `0.9` | 采样温度（0–2） |
 | `timeoutMs` | `180000` | 单次调用超时，超时中止 |
 | `maxInputChars` | `20000` | 草稿字符上限，超了 413 |
@@ -263,14 +263,17 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 同源、无鉴权（与 DSH 其它插件控制面一致）：
 
 ```
-GET  /dsh-prompt-optimizer/model
-     → { ok, provider, model, effort, efforts: [{ id, name }] }   # 当前路由自己声明的思考强度
+GET  /dsh-prompt-optimizer/models
+     → { ok, current: { provider, model }|null, models: [{ provider, providerName, model, name }] }
+
+GET  /dsh-prompt-optimizer/model[?provider=&model=]
+     → { ok, provider, model, effort, efforts: [{ id, name }] }   # 指定模型时读该模型的挡位
 
 GET  /dsh-prompt-optimizer/health
      → { ok, plugin, version, style, styles, preset, presets, localFallback }
 
 POST /dsh-prompt-optimizer/optimize
-     body: { "text": "<草稿>", "style": "hard|team|cool", "preset": "native|feat|issue|refactor" }
+     body: { "text": "<草稿>", "style": "hard|team|cool", "preset": "native|feat|issue|refactor", "provider": "…", "model": "…" }
      → { ok: true, style, preset, text, engine: "llm"|"local", route: { provider, model }|null, ms, warning? }
      → { ok: false, error: { code, message } }
 
@@ -281,7 +284,7 @@ POST /dsh-prompt-optimizer/probe          # 诊断：原样跑一次模型调用
 
 错误码：`EMPTY_INPUT`(400)、`INPUT_TOO_LONG`(413)、`BAD_JSON`(400)、`BUSY`(429)、`NOT_FOUND`(404)、`PRESET_NEEDS_MODEL`(502，选了 Trellis 规范但没有可用模型)；模型侧失败原样带出 provider-neutral code（`NO_ADAPTER` / `RATE_LIMIT` / `CONTEXT_WINDOW_EXCEEDED`…，502）。
 
-**预算从哪来**：插件不猜数字。`maxTokens` 没填就不往请求里放这个字段，适配器用它安装时配好的上限；`reasoningEffort` 没填就用当前选中模型那一行（`agentDefaultModel.currentSelection()`）的强度。只有你在插件配置里显式写了值，才覆盖模型自己的设置 —— 适配器若不认这个强度，会去掉它重试一次。
+**预算从哪来**：插件不猜数字。`maxTokens` 没填就不往请求里放这个字段，适配器用它安装时配好的上限；思考强度由界面按当前模型决定：该模型有上次设定就用上次，没有就用模型 `defaultEffort`，再没有就用第一个挡位；模型没有挡位时整行隐藏、请求里也不带 `reasoningEffort`。只有你在插件配置里显式写了值，才强制覆盖 —— 适配器若不认这个强度，会去掉它重试一次。
 
 三条降级路径：
 

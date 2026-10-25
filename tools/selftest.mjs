@@ -222,6 +222,56 @@ function mountHost(llm, config, agentDefaultModel) {
   check('health reports the version', body.version === H.VERSION, JSON.stringify(body));
   check('health lists the three flavours', Array.isArray(body.styles) && body.styles.join(',') === 'hard,team,cool', JSON.stringify(body.styles));
   check('health lists the task-card shapes', Array.isArray(body.presets) && body.presets.join(',') === 'native,feat,issue,refactor', JSON.stringify(body.presets));
+  check('the plugin version is 0.6.1', H.VERSION === '0.6.1', H.VERSION);
+}
+
+// --- GET /models -----------------------------------------------------------
+{
+  const llm = fakeLlm([]);
+  const handler = mountHost(llm, undefined, { currentSelection: () => ({ provider: 'seeded', model: 'seeded-model' }) });
+  const res = fakeResponse();
+  await handler(fakeRequest('GET', '/dsh-prompt-optimizer/models'), res);
+  const body = res.json();
+  check(
+    'models lists the catalog and the current selection',
+    res.statusCode === 200 &&
+      body.ok === true &&
+      body.current !== null &&
+      body.current.provider === 'seeded' &&
+      body.current.model === 'seeded-model' &&
+      body.models.length === 1 &&
+      body.models[0].provider === 'fake-provider' &&
+      body.models[0].model === 'fake-model',
+    JSON.stringify(body),
+  );
+  check('models carries the provider display name', body.models[0].providerName === 'Fake', JSON.stringify(body.models[0]));
+  check('models falls back to the model id for its label', body.models[0].name === 'fake-model', JSON.stringify(body.models[0]));
+}
+
+{
+  const handler = mountHost(undefined, undefined);
+  const res = fakeResponse();
+  await handler(fakeRequest('GET', '/dsh-prompt-optimizer/models'), res);
+  const body = res.json();
+  check('models degrades to an empty catalog without an llm service', body.ok === true && body.current === null && body.models.length === 0, JSON.stringify(body));
+}
+
+// --- GET /model with an explicit route -------------------------------------
+{
+  const llm = fakeLlm([]);
+  llm.resolveModelInfo = async () => ({
+    reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'max', name: 'Max' }], defaultEffort: 'max' },
+  });
+  const handler = mountHost(llm, undefined, { currentSelection: () => ({ provider: 'seeded', model: 'seeded-model' }) });
+  const res = fakeResponse();
+  await handler(fakeRequest('GET', '/dsh-prompt-optimizer/model?provider=other&model=other-model'), res);
+  const body = res.json();
+  check('model accepts an explicit route', body.ok === true && body.provider === 'other' && body.model === 'other-model', JSON.stringify(body));
+  check(
+    'the explicit model advertises its own efforts',
+    body.efforts.map((effort) => effort.id).join(',') === 'low,max' && body.effort === 'max',
+    JSON.stringify(body),
+  );
 }
 
 // --- POST /optimize, happy path -------------------------------------------
@@ -356,6 +406,7 @@ section('client half');
 const clientSource = readFileSync(new URL('../client.js', import.meta.url), 'utf8');
 let capturedModule = null;
 const styleTags = [];
+const storage = new Map();
 
 const sandbox = {
   console,
@@ -364,6 +415,15 @@ const sandbox = {
   AbortController,
   Symbol,
   navigator: { language: 'zh-CN' },
+  localStorage: {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => {
+      storage.set(key, String(value));
+    },
+    removeItem: (key) => {
+      storage.delete(key);
+    },
+  },
   document: {
     querySelector: (selector) => (selector.includes('data-plugin-css') && styleTags.length > 0 ? styleTags[0] : null),
     createElement: () => ({ dataset: {}, textContent: '' }),
@@ -501,6 +561,105 @@ check('the model description lists the efforts', modelOk.ok === true && modelOk.
 check('the model description carries the current effort', modelOk.effort === 'max', modelOk.effort);
 const modelDown = clientExports.readModel({ ok: false, error: { code: 'NO_ROUTE', message: '没路由' } }, 200);
 check('a missing model degrades quietly', modelDown.ok === false && modelDown.efforts.length === 0, JSON.stringify(modelDown));
+
+const modelsOk = clientExports.readModels(
+  {
+    ok: true,
+    current: { provider: 'p', model: 'm' },
+    models: [
+      { provider: 'p', providerName: 'P', model: 'm', name: 'M' },
+      { provider: 'p', model: 'm2' },
+    ],
+  },
+  200,
+);
+check(
+  'the model catalog lists the current selection',
+  modelsOk.ok === true && modelsOk.current.provider === 'p' && modelsOk.current.model === 'm',
+  JSON.stringify(modelsOk),
+);
+check(
+  'the model catalog keeps both provider and model',
+  modelsOk.models.length === 2 && modelsOk.models[0].providerName === 'P' && modelsOk.models[1].name === 'm2',
+  JSON.stringify(modelsOk.models),
+);
+const modelsDown = clientExports.readModels({ ok: false, error: { code: 'NO_LLM', message: '没服务' } }, 200);
+check(
+  'a missing catalog degrades quietly',
+  modelsDown.ok === false && modelsDown.models.length === 0 && modelsDown.current === null,
+  JSON.stringify(modelsDown),
+);
+
+const effortModel = {
+  efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }, { id: 'max', name: 'Max' }],
+  effort: 'high',
+};
+check(
+  'a first visit starts on the model default',
+  clientExports.resolveEffort(effortModel, '').effort === 'high' && clientExports.resolveEffort(effortModel, '').source === 'model',
+);
+check(
+  'a later visit starts on the last picked effort',
+  clientExports.resolveEffort(effortModel, 'max').effort === 'max' && clientExports.resolveEffort(effortModel, 'max').source === 'stored',
+);
+check('a stale effort falls back to the model default', clientExports.resolveEffort(effortModel, 'gone').effort === 'high');
+check(
+  'a model without efforts yields no effort row',
+  clientExports.resolveEffort({ efforts: [], effort: 'max' }, 'max').effort === '' &&
+    clientExports.resolveEffort({ efforts: [], effort: 'max' }, 'max').source === 'none',
+);
+check(
+  'a model without a default starts on its first effort',
+  clientExports.resolveEffort({ efforts: [{ id: 'only', name: 'Only' }], effort: '' }, '').effort === 'only',
+);
+
+check(
+  'the request body carries the picked model',
+  JSON.stringify(clientExports.postBody('x', 'hard', 'native', 'max', '', { provider: 'p', model: 'm' })) ===
+    JSON.stringify({ text: 'x', style: 'hard', preset: 'native', reasoningEffort: 'max', provider: 'p', model: 'm' }),
+  JSON.stringify(clientExports.postBody('x', 'hard', 'native', 'max', '', { provider: 'p', model: 'm' })),
+);
+check('a half route never travels', clientExports.postBody('x', 'hard', 'native', '', '', { provider: 'p' }).provider === undefined);
+
+clientExports.rememberModel({ provider: 'p', model: 'm', manual: true });
+check(
+  'the forge model round-trips',
+  clientExports.readStoredModel().provider === 'p' &&
+    clientExports.readStoredModel().model === 'm' &&
+    clientExports.readStoredModel().manual === true,
+);
+clientExports.rememberEffort('p', 'm', 'max');
+check('the per-model effort round-trips', clientExports.readStoredEffort('p', 'm') === 'max');
+clientExports.rememberLock({ provider: 'p', model: 'm', effort: 'max' });
+check(
+  'the lock snapshot round-trips',
+  clientExports.readStoredLock().provider === 'p' && clientExports.readStoredLock().effort === 'max',
+);
+clientExports.clearStoredLock();
+check('unlocking clears the snapshot', clientExports.readStoredLock() === null);
+check('an unwritten model effort reads empty', clientExports.readStoredEffort('p', 'other') === '');
+
+check(
+  'the busy state paints an orbiting border marquee',
+  /@property --dshPoAngle/.test(clientExports.CSS) &&
+    /@keyframes dshPoOrbit/.test(clientExports.CSS) &&
+    /data-phase=busy\]::before/.test(clientExports.CSS),
+);
+check(
+  'the marquee stops under reduced motion',
+  /prefers-reduced-motion:reduce\)\{[^}]*data-phase=busy\]::before/.test(clientExports.CSS),
+);
+check(
+  'the model row has select and lock styles',
+  /\.dshPo_modelRow\{/.test(clientExports.CSS) && /\.dshPo_select\{/.test(clientExports.CSS) && /\.dshPo_lock\{/.test(clientExports.CSS),
+);
+check(
+  'dictionaries name the model row in both locales',
+  typeof clientExports.zh['model.label'] === 'string' &&
+    typeof clientExports.en['model.label'] === 'string' &&
+    typeof clientExports.zh['model.lock'] === 'string' &&
+    typeof clientExports.en['model.lock'] === 'string',
+);
 check('storage-less hosts fall back to hard', clientExports.readStoredStyle() === 'hard');
 check(
   'stylesheet styles the flavour menu',
@@ -584,7 +743,24 @@ check(
   const tree = mod.HardForge({ useInput: () => '写个周报', inputActions: { setDraft: () => {} }, t: undefined });
   const pill = tree.props.children[0];
   const picker = tree.props.children[1];
-  const row = picker.props.children[0];
+  const row = picker.props.children[1];
+  const modelRow = picker.props.children[0];
+  const modelSelect = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-select',
+  );
+  const lockButton = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'lock',
+  );
+  check(
+    'the menu opens with a model row',
+    modelRow.props['data-dsh-prompt-optimizer'] === 'model-row' && modelSelect !== undefined && lockButton !== undefined,
+    JSON.stringify({ row: modelRow.props['data-dsh-prompt-optimizer'], select: Boolean(modelSelect), lock: Boolean(lockButton) }),
+  );
+  check(
+    'the lock starts unlocked',
+    lockButton.props['data-locked'] === 'false' && lockButton.props['aria-checked'] === 'false',
+    JSON.stringify({ locked: lockButton.props['data-locked'], checked: lockButton.props['aria-checked'] }),
+  );
   const forgeButton = (picker.props.children || []).find((child) => child !== null && child !== undefined && child.props !== undefined && child.props.className === 'dshPo_go');
   const chips = (row.props.children || []).filter(
     (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
@@ -657,6 +833,147 @@ check(
   check(
     'Escape and an outside click still put the menu away',
     /event\.key === 'Escape'/.test(clientSource) && /addEventListener\('pointerdown'/.test(clientSource),
+  );
+}
+
+// A locked menu freezes the model select and every effort chip.
+{
+  let captured = null;
+  const box = {
+    console,
+    setTimeout,
+    clearTimeout,
+    AbortController,
+    Symbol,
+    navigator: { language: 'zh-CN' },
+    document: {
+      querySelector: () => null,
+      createElement: () => ({ dataset: {}, textContent: '' }),
+      head: { appendChild: () => {} },
+    },
+  };
+  box.window = { __ModuleLoader__: { load: (mod) => { captured = mod; } } };
+  box.globalThis = box;
+  vm.createContext(box);
+  vm.runInContext(clientSource, box, { filename: 'client.js' });
+  const preset = [
+    'idle',
+    '',
+    true,
+    'hard',
+    'native',
+    [{ id: 'low', name: 'Low' }, { id: 'max', name: 'Max' }],
+    'max',
+    [{ provider: 'p', providerName: 'P', model: 'm', name: 'M' }],
+    { provider: 'p', model: 'm', manual: true },
+    { provider: 'p', model: 'm', effort: 'max' },
+    'stored',
+  ];
+  let cursor = 0;
+  const stateReact = {
+    useState: (initial) => {
+      const value = cursor < preset.length ? preset[cursor] : (typeof initial === 'function' ? initial() : initial);
+      cursor += 1;
+      return [value, () => {}];
+    },
+    useEffect: () => {},
+    useRef: (initial) => ({ current: initial }),
+    useCallback: (callback) => callback,
+  };
+  const mod = captured.factory((specifier) => {
+    if (specifier === 'react') return stateReact;
+    if (specifier === 'react/jsx-runtime') return jsxRuntimeStub;
+    throw new Error('unexpected require: ' + specifier);
+  });
+  const tree = mod.HardForge({ useInput: () => '写个周报', inputActions: { setDraft: () => {} }, t: undefined });
+  const picker = tree.props.children[1];
+  const modelRow = picker.props.children[0];
+  const select = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-select',
+  );
+  const lock = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'lock',
+  );
+  const effortRow = picker.props.children[2];
+  const effortChips = (effortRow.props.children || []).filter(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-effort'] !== undefined,
+  );
+  check('a locked menu disables the model select', select.props.disabled === true, String(select.props.disabled));
+  check(
+    'a locked menu shows the locked switch',
+    lock.props['data-locked'] === 'true' && lock.props['aria-checked'] === 'true' && lock.props.children === '已锁定',
+    JSON.stringify({ locked: lock.props['data-locked'], checked: lock.props['aria-checked'], text: lock.props.children }),
+  );
+  check(
+    'a locked menu disables every effort chip',
+    effortChips.length === 2 && effortChips.every((chip) => chip.props.disabled === true),
+    JSON.stringify(effortChips.map((chip) => chip.props.disabled)),
+  );
+  check(
+    'a locked menu labels the effort as last picked',
+    /上次设定/.test(JSON.stringify(effortRow.props.children)),
+    JSON.stringify(effortRow.props.children).slice(-160),
+  );
+}
+
+// A model that advertises no efforts keeps the thinking row out entirely.
+{
+  let captured = null;
+  const box = {
+    console,
+    setTimeout,
+    clearTimeout,
+    AbortController,
+    Symbol,
+    navigator: { language: 'zh-CN' },
+    document: {
+      querySelector: () => null,
+      createElement: () => ({ dataset: {}, textContent: '' }),
+      head: { appendChild: () => {} },
+    },
+  };
+  box.window = { __ModuleLoader__: { load: (mod) => { captured = mod; } } };
+  box.globalThis = box;
+  vm.createContext(box);
+  vm.runInContext(clientSource, box, { filename: 'client.js' });
+  const preset = [
+    'idle',
+    '',
+    true,
+    'hard',
+    'native',
+    [],
+    '',
+    [{ provider: 'p', providerName: 'P', model: 'm', name: 'M' }],
+    { provider: 'p', model: 'm', manual: false },
+    null,
+    'none',
+  ];
+  let cursor = 0;
+  const stateReact = {
+    useState: (initial) => {
+      const value = cursor < preset.length ? preset[cursor] : (typeof initial === 'function' ? initial() : initial);
+      cursor += 1;
+      return [value, () => {}];
+    },
+    useEffect: () => {},
+    useRef: (initial) => ({ current: initial }),
+    useCallback: (callback) => callback,
+  };
+  const mod = captured.factory((specifier) => {
+    if (specifier === 'react') return stateReact;
+    if (specifier === 'react/jsx-runtime') return jsxRuntimeStub;
+    throw new Error('unexpected require: ' + specifier);
+  });
+  const tree = mod.HardForge({ useInput: () => '写个周报', inputActions: { setDraft: () => {} }, t: undefined });
+  const picker = tree.props.children[1];
+  const effortRows = (picker.props.children || []).filter(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'effort-row',
+  );
+  check(
+    'a model without efforts hides the effort row entirely',
+    effortRows.length === 0 && (picker.props.children || []).filter((child) => child !== null && child !== undefined).length === 3,
+    JSON.stringify({ effortRows: effortRows.length, rows: picker.props.children.length }),
   );
 }
 
@@ -734,7 +1051,7 @@ check(
   });
   const openTree = openMod.HardForge({ useInput: () => '', inputActions: { setDraft: () => {} }, t: undefined });
   const openMenu = openTree.props.children[1];
-  const openRow = openMenu.props.children[0];
+  const openRow = openMenu.props.children[1];
   const chips = (openRow.props.children || []).filter(
     (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
   );
@@ -897,6 +1214,26 @@ section('model config');
   await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写一个网页' })), res);
   check('an explicit row budget wins', llm.record.calls[0].maxTokens === 1234, String(llm.record.calls[0].maxTokens));
   check('an explicit row effort wins', llm.record.calls[0].reasoningEffort === 'high', String(llm.record.calls[0].reasoningEffort));
+}
+
+{
+  const llm = fakeLlm([
+    { type: 'text-delta', index: 0, text: HARDENED },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]);
+  const handler = mountHost(llm, undefined, { currentSelection: () => ({ provider: 'seeded', model: 'seeded-model' }) });
+  const res = fakeResponse();
+  await handler(
+    fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写一个网页', provider: 'picked', model: 'picked-model' })),
+    res,
+  );
+  const body = res.json();
+  check('an explicit forge model wins the route', body.route.provider === 'picked' && body.route.model === 'picked-model', JSON.stringify(body.route));
+  check(
+    'the model call uses the picked route',
+    llm.record.calls[0].provider === 'picked' && llm.record.calls[0].model === 'picked-model',
+    JSON.stringify({ provider: llm.record.calls[0].provider, model: llm.record.calls[0].model }),
+  );
 }
 
 // --- the diagnostic probe --------------------------------------------------

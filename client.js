@@ -59,6 +59,8 @@ window.__ModuleLoader__.load({
     const ENDPOINT = '/dsh-prompt-optimizer/optimize';
     /** Where the picker asks which thinking efforts the current model offers. */
     const MODEL_ENDPOINT = '/dsh-prompt-optimizer/model';
+    /** Where the picker asks which forge models the host can offer. */
+    const MODELS_ENDPOINT = '/dsh-prompt-optimizer/models';
     /** Registry id of this composer entry. */
     const ENTRY_ID = 'dsh-prompt-optimizer:hard-forge';
     /** Stylesheet identity, tagged like every shipped client bundle stylesheet. */
@@ -122,6 +124,156 @@ window.__ModuleLoader__.load({
     }
 
     // ---------------------------------------------------------------------
+    // Forge model + thinking strength — remembered between visits
+    // ---------------------------------------------------------------------
+    /** Where the picked forge model is remembered. */
+    const MODEL_STORAGE_KEY = 'dsh-prompt-optimizer:model';
+
+    /** Where the lock snapshot lives. Presence means "locked". */
+    const LOCK_STORAGE_KEY = 'dsh-prompt-optimizer:lock';
+
+    /** Per-model effort memory prefix; the model id is appended. */
+    const EFFORT_STORAGE_PREFIX = 'dsh-prompt-optimizer:effort:';
+
+    /** Read one JSON object; anything missing or malformed reads as null. */
+    function readStoredJson(key) {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return null;
+        const raw = localStorage.getItem(key);
+        if (typeof raw !== 'string' || raw === '') return null;
+        const parsed = JSON.parse(raw);
+        return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+
+    /** Write one JSON object; blocked storage costs memory, never the run. */
+    function writeStoredJson(key, value) {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return;
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch {
+        /* quota or privacy mode — the current run still uses the value */
+      }
+    }
+
+    /** Remove one key; a blocked storage is already as empty as it gets. */
+    function removeStored(key) {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return;
+        localStorage.removeItem(key);
+      } catch {
+        /* nothing to remove */
+      }
+    }
+
+    /** Read the remembered forge model; `manual` says the user picked it. */
+    function readStoredModel() {
+      const value = readStoredJson(MODEL_STORAGE_KEY);
+      if (
+        value === null ||
+        typeof value.provider !== 'string' ||
+        value.provider === '' ||
+        typeof value.model !== 'string' ||
+        value.model === ''
+      ) {
+        return null;
+      }
+      return { provider: value.provider, model: value.model, manual: value.manual === true };
+    }
+
+    /** Remember the forge model; `manual` means "do not follow the current one". */
+    function rememberModel(selection) {
+      if (
+        selection === null ||
+        typeof selection !== 'object' ||
+        typeof selection.provider !== 'string' ||
+        selection.provider === '' ||
+        typeof selection.model !== 'string' ||
+        selection.model === ''
+      ) {
+        return;
+      }
+      writeStoredJson(MODEL_STORAGE_KEY, {
+        provider: selection.provider,
+        model: selection.model,
+        manual: selection.manual === true,
+      });
+    }
+
+    /** Read the lock snapshot; null means the plugin is unlocked. */
+    function readStoredLock() {
+      const value = readStoredJson(LOCK_STORAGE_KEY);
+      if (
+        value === null ||
+        typeof value.provider !== 'string' ||
+        value.provider === '' ||
+        typeof value.model !== 'string' ||
+        value.model === ''
+      ) {
+        return null;
+      }
+      return {
+        provider: value.provider,
+        model: value.model,
+        effort: typeof value.effort === 'string' ? value.effort : '',
+      };
+    }
+
+    /** Store the frozen model + effort. */
+    function rememberLock(snapshot) {
+      if (
+        snapshot === null ||
+        typeof snapshot !== 'object' ||
+        typeof snapshot.provider !== 'string' ||
+        snapshot.provider === '' ||
+        typeof snapshot.model !== 'string' ||
+        snapshot.model === ''
+      ) {
+        return;
+      }
+      writeStoredJson(LOCK_STORAGE_KEY, {
+        provider: snapshot.provider,
+        model: snapshot.model,
+        effort: typeof snapshot.effort === 'string' ? snapshot.effort : '',
+      });
+    }
+
+    /** Drop the lock snapshot, keeping the current model + effort in place. */
+    function clearStoredLock() {
+      removeStored(LOCK_STORAGE_KEY);
+    }
+
+    /** One model's remembered effort key. */
+    function effortStorageKey(provider, model) {
+      return EFFORT_STORAGE_PREFIX + encodeURIComponent(String(provider)) + '/' + encodeURIComponent(String(model));
+    }
+
+    /** Read the last effort picked for this model; empty when never picked. */
+    function readStoredEffort(provider, model) {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return '';
+        const value = localStorage.getItem(effortStorageKey(provider, model));
+        return typeof value === 'string' ? value : '';
+      } catch {
+        return '';
+      }
+    }
+
+    /** Remember the effort picked for this model. */
+    function rememberEffort(provider, model, effort) {
+      try {
+        if (typeof localStorage === 'undefined' || localStorage === null) return;
+        const key = effortStorageKey(provider, model);
+        if (typeof effort === 'string' && effort !== '') localStorage.setItem(key, effort);
+        else localStorage.removeItem(key);
+      } catch {
+        /* quota or privacy mode — the current run still uses the effort */
+      }
+    }
+
+    // ---------------------------------------------------------------------
     // Dictionaries
     // ---------------------------------------------------------------------
     /**
@@ -138,8 +290,18 @@ window.__ModuleLoader__.load({
       'button.titleBusy': '正在锻造，别催，马上给你硬的',
       'button.forge': '开锻',
       'effort.label': '思考强度',
-      'effort.hint': '这一档思考强度会随请求一起发出去，默认取当前模型配置的那一档',
+      'effort.hint': '这一档思考强度会随请求一起发出去，默认取该模型上一次的设定',
       'effort.default': '默认跟随模型',
+      'effort.fromStored': '上次设定',
+      'effort.fromModel': '模型默认',
+      'effort.fromFallback': '首个挡位',
+      'model.label': '模型',
+      'model.lock': '锁定',
+      'model.locked': '已锁定',
+      'model.lockHint': '锁定当前模型与思考强度，锁定后不再变动',
+      'model.unlockHint': '解锁后可以重新选择模型与思考强度',
+      'model.current': '当前模型',
+      'model.empty': '没有可用模型',
       'style.hard': '硬汉',
       'style.team': '肌肉集团',
       'style.cool': '雷霆炫酷',
@@ -172,8 +334,18 @@ window.__ModuleLoader__.load({
       'button.titleBusy': 'Forging — hold on, it will come out hard',
       'button.forge': 'Forge',
       'effort.label': 'Thinking',
-      'effort.hint': 'Sent with the request; defaults to the effort configured on this model',
+      'effort.hint': 'Sent with the request; defaults to the last effort picked for this model',
       'effort.default': 'model default',
+      'effort.fromStored': 'last picked',
+      'effort.fromModel': 'model default',
+      'effort.fromFallback': 'first option',
+      'model.label': 'Model',
+      'model.lock': 'Lock',
+      'model.locked': 'Locked',
+      'model.lockHint': 'Lock the current model and thinking effort; neither will change',
+      'model.unlockHint': 'Unlock to pick a different model or thinking effort',
+      'model.current': 'current model',
+      'model.empty': 'no models available',
       'style.hard': 'hard',
       'style.team': 'team',
       'style.cool': 'cool',
@@ -248,6 +420,17 @@ window.__ModuleLoader__.load({
       'animation:dshPoFlow 1.15s linear infinite,dshPoPulse 1.5s ease-in-out infinite}',
       '.dshPo_btn[data-phase=busy] .dshPo_shine::after{opacity:1;animation:dshPoSweep .95s linear infinite}',
       '.dshPo_btn[data-phase=busy] .dshPo_label{animation-duration:1.6s}',
+      // The marquee: a second, tighter ring orbits the border while busy. It is
+      // a masked conic gradient, so only the 1.5px edge paints; the angle is a
+      // registered custom property, which keeps the animation compositor-cheap.
+      '@property --dshPoAngle{syntax:"<angle>";initial-value:0deg;inherits:false}',
+      '.dshPo_btn[data-phase=busy]::before{content:"";position:absolute;inset:-1.5px;border-radius:inherit;padding:1.5px;',
+      'pointer-events:none;z-index:0;',
+      'background:conic-gradient(from var(--dshPoAngle),transparent 0deg 36%,#ffb020 45%,#ff3b30 51%,transparent 60%,',
+      'transparent 72%,#ffd60a 81%,#ff8a00 88%,transparent 96%);',
+      '-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;',
+      'mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;',
+      'animation:dshPoOrbit 1.05s linear infinite}',
       // done: teal-green ring, one happy pop, lasting glow.
       '.dshPo_btn[data-phase=done]{opacity:1;--dshPo-ring:linear-gradient(115deg,#12b76a,#7ee2b8 45%,#0fbf7f);',
       '--dshPo-tint:linear-gradient(135deg,rgba(18,183,106,.22),rgba(126,226,184,.15));',
@@ -264,6 +447,7 @@ window.__ModuleLoader__.load({
       '@keyframes dshPoFlow{from{background-position:0% 50%,0% 50%,0% 50%}to{background-position:0% 50%,0% 50%,100% 50%}}',
       '@keyframes dshPoTextFlow{from{background-position:0% 50%}to{background-position:100% 50%}}',
       '@keyframes dshPoSweep{from{left:-60%}to{left:120%}}',
+      '@keyframes dshPoOrbit{to{--dshPoAngle:360deg}}',
       '@keyframes dshPoPulse{0%,100%{box-shadow:0 0 0 1px rgba(255,140,0,.40),0 0 12px rgba(255,90,0,.28)}',
       '50%{box-shadow:0 0 0 1px rgba(255,196,0,.55),0 0 26px rgba(255,120,0,.50)}}',
       '@keyframes dshPoPop{0%{transform:scale(.90)}55%{transform:scale(1.07)}100%{transform:scale(1)}}',
@@ -288,6 +472,20 @@ window.__ModuleLoader__.load({
       '.dshPo_row{display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;align-items:center;overflow-x:auto}',
       '.dshPo_sep{flex:0 0 auto;width:1px;align-self:stretch;margin:2px 1px;border-radius:1px;background:rgba(255,106,0,.30)}',
       '.dshPo_rowLabel{flex:0 0 auto;font-size:var(--dsh-content-font-size-caption,12px);opacity:.62;letter-spacing:.4px}',
+      '.dshPo_modelRow{width:100%;gap:6px}',
+      '.dshPo_select{flex:1 1 auto;min-width:0;max-width:340px;height:30px;padding:0 8px;border-radius:8px;',
+      'border:1px solid rgba(255,106,0,.30);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base,#1c1d21));',
+      'color:var(--dsw-alias-label-primary,inherit);font:inherit;font-size:var(--dsh-content-font-size-caption,12px);cursor:pointer}',
+      '.dshPo_select:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
+      '.dshPo_select:disabled{opacity:.55;cursor:not-allowed}',
+      '.dshPo_lock{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:6px 9px;border-radius:8px;',
+      'border:1px solid rgba(255,106,0,.30);background:transparent;color:var(--dsw-alias-label-primary,inherit);',
+      'font:inherit;font-size:var(--dsh-content-font-size-caption,12px);font-weight:700;letter-spacing:.3px;cursor:pointer;',
+      'transition:background .14s ease,border-color .14s ease,color .14s ease}',
+      '.dshPo_lock:hover{background:rgba(255,106,0,.14);border-color:rgba(255,106,0,.44)}',
+      '.dshPo_lock:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
+      '.dshPo_lock[data-locked=true]{background:linear-gradient(135deg,rgba(255,106,0,.24),rgba(168,85,247,.20));',
+      'border-color:rgba(255,106,0,.58);color:var(--dsw-alias-label-primary,inherit)}',
       '.dshPo_effortDefault{flex:0 0 auto;margin-left:auto;font-size:var(--dsh-content-font-size-caption,12px);opacity:.5}',
       '.dshPo_go{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;',
       'padding:8px 12px;border-radius:10px;border:1px solid rgba(255,106,0,.55);cursor:pointer;font:inherit;font-weight:700;',
@@ -303,7 +501,7 @@ window.__ModuleLoader__.load({
       '.dshPo_visuallyHidden{clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}',
       // Accessibility gates: nothing moves for reduced motion, and forced-colors
       // gets a plain system pill instead of an unreadable gradient.
-      '@media (prefers-reduced-motion:reduce){.dshPo_btn,.dshPo_btn .dshPo_label,.dshPo_shine::after',
+      '@media (prefers-reduced-motion:reduce){.dshPo_btn,.dshPo_btn .dshPo_label,.dshPo_shine::after,.dshPo_btn[data-phase=busy]::before',
       '{animation:none!important;transition:none!important}',
       '.dshPo_btn:hover:not(:disabled){transform:none}.dshPo_shine::after{opacity:0!important}}',
       '@media (forced-colors:active){.dshPo_btn{background:ButtonFace;border-color:ButtonBorder;color:ButtonText;',
@@ -375,15 +573,95 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The request body for one forge. The flavour always travels with the call,
-     * so the host never has to fall back to the deployment config.
+     * Parse the host's model catalog into `{ ok, current, models }`.
+     *
+     * @param response - parsed JSON body (may be anything).
+     * @param status - HTTP status.
+     * @returns a shape the picker can render without further checks.
      */
-    function postBody(text, flavour, preset, effort, locale) {
+    function readModels(response, status) {
+      if (response === null || typeof response !== 'object' || response.ok !== true) {
+        const error = response !== null && typeof response === 'object' && response.error !== null && typeof response.error === 'object' ? response.error : null;
+        return {
+          ok: false,
+          current: null,
+          models: [],
+          error: { code: error !== null && typeof error.code === 'string' ? error.code : 'MODELS_UNAVAILABLE', message: textOf(error !== null && error.message !== undefined ? error.message : 'HTTP ' + String(status)) },
+        };
+      }
+      const current =
+        response.current !== null &&
+        typeof response.current === 'object' &&
+        typeof response.current.provider === 'string' &&
+        response.current.provider !== '' &&
+        typeof response.current.model === 'string' &&
+        response.current.model !== ''
+          ? { provider: response.current.provider, model: response.current.model }
+          : null;
+      const models = Array.isArray(response.models)
+        ? response.models
+            .filter(
+              (item) =>
+                item !== null &&
+                typeof item === 'object' &&
+                typeof item.provider === 'string' &&
+                item.provider !== '' &&
+                typeof item.model === 'string' &&
+                item.model !== '',
+            )
+            .map((item) => ({
+              provider: item.provider,
+              providerName: typeof item.providerName === 'string' && item.providerName !== '' ? item.providerName : item.provider,
+              model: item.model,
+              name: typeof item.name === 'string' && item.name !== '' ? item.name : item.model,
+            }))
+        : [];
+      return { ok: true, current, models };
+    }
+
+    /**
+     * Pick the effort one model should start on.
+     *
+     * First visit: the model's own default. Later visits: the last effort picked
+     * for that model, but only while the model still advertises it. A model that
+     * advertises no efforts yields an empty effort (and the row stays hidden).
+     *
+     * @param model - `{ efforts, effort }` from `readModel`.
+     * @param stored - the effort last picked for this model, if any.
+     * @returns `{ effort, source }` where source is `stored|model|fallback|none`.
+     */
+    function resolveEffort(model, stored) {
+      const efforts = model !== null && typeof model === 'object' && Array.isArray(model.efforts) ? model.efforts : [];
+      if (efforts.length === 0) return { effort: '', source: 'none' };
+      const advertised = (id) =>
+        typeof id === 'string' && id !== '' && efforts.some((item) => item !== null && typeof item === 'object' && item.id === id);
+      if (advertised(stored)) return { effort: stored, source: 'stored' };
+      if (advertised(model.effort)) return { effort: model.effort, source: 'model' };
+      return { effort: efforts[0].id, source: 'fallback' };
+    }
+
+    /**
+     * The request body for one forge. The flavour always travels with the call,
+     * so the host never has to fall back to the deployment config. A picked
+     * forge model travels as an explicit route override.
+     */
+    function postBody(text, flavour, preset, effort, locale, selection) {
       const picked = STYLE_IDS.indexOf(flavour) === -1 ? 'hard' : flavour;
       const shape = PRESET_IDS.indexOf(preset) === -1 ? 'native' : preset;
       const body = { text, style: picked, preset: shape };
       if (typeof effort === 'string' && effort !== '') body.reasoningEffort = effort;
       if (typeof locale === 'string' && locale !== '') body.locale = locale;
+      if (
+        selection !== null &&
+        typeof selection === 'object' &&
+        typeof selection.provider === 'string' &&
+        selection.provider !== '' &&
+        typeof selection.model === 'string' &&
+        selection.model !== ''
+      ) {
+        body.provider = selection.provider;
+        body.model = selection.model;
+      }
       return body;
     }
 
@@ -429,6 +707,10 @@ window.__ModuleLoader__.load({
       // Thinking efforts come from the model itself, never from a fixed list.
       const [efforts, setEfforts] = react.useState([]);
       const [effort, setEffort] = react.useState('');
+      const [models, setModels] = react.useState([]);
+      const [selection, setSelection] = react.useState(() => readStoredModel());
+      const [lockSnapshot, setLockSnapshot] = react.useState(() => readStoredLock());
+      const [effortSource, setEffortSource] = react.useState('none');
       const abortRef = react.useRef(null);
       // The pill and its menu share one positioned root; the menu is a sibling
       // so the pill stays mounted (and keeps focus) while the menu is open.
@@ -499,33 +781,133 @@ window.__ModuleLoader__.load({
       const empty = typeof draft !== 'string' || draft.trim() === '';
       const busy = phase === 'busy';
 
-      // One read of the route on mount: which efforts this model advertises and
-      // which one the deployment is already running.
+      const loadModelDetail = react.useCallback(async (target) => {
+        if (target !== null && typeof target !== 'object') return null;
+        try {
+          const url =
+            target === null
+              ? MODEL_ENDPOINT
+              : MODEL_ENDPOINT +
+                '?provider=' +
+                encodeURIComponent(target.provider) +
+                '&model=' +
+                encodeURIComponent(target.model);
+          const response = await fetch(url, { headers: { accept: 'application/json' } });
+          let body = null;
+          try {
+            body = await response.json();
+          } catch {
+            body = null;
+          }
+          const model = readModel(body, response.status);
+          return model.ok ? model : null;
+        } catch {
+          return null;
+        }
+      }, []);
+
+      /** Apply one model description to the effort row. */
+      const applyModelDetail = (detail, target, stored) => {
+        setEfforts(detail.efforts);
+        const resolved = resolveEffort(detail, stored);
+        setEffort(resolved.effort);
+        setEffortSource(resolved.source);
+      };
+
+      // One read of the catalog on mount: which models the host offers, then
+      // which efforts the chosen model advertises and which effort should start.
       react.useEffect(() => {
         let alive = true;
         (async () => {
+          let catalog = null;
           try {
-            const response = await fetch(MODEL_ENDPOINT, { headers: { accept: 'application/json' } });
+            const response = await fetch(MODELS_ENDPOINT, { headers: { accept: 'application/json' } });
             let body = null;
             try {
               body = await response.json();
             } catch {
               body = null;
             }
-            const model = readModel(body, response.status);
-            if (!alive || !model.ok) return;
-            setEfforts(model.efforts);
-            if (model.effort !== '') setEffort((current) => (current === '' ? model.effort : current));
+            const parsed = readModels(body, response.status);
+            if (parsed.ok) catalog = parsed;
           } catch {
-            /* no description: the picker simply shows no effort row */
+            /* no catalog: fall back to the model description alone */
+          }
+          if (!alive) return;
+          if (catalog !== null) setModels(catalog.models);
+
+          const snapshot = readStoredLock();
+          const stored = readStoredModel();
+          let target = null;
+          let storedEffort = '';
+          if (snapshot !== null) {
+            target = { provider: snapshot.provider, model: snapshot.model, manual: true };
+            storedEffort = snapshot.effort;
+          } else if (stored !== null) {
+            target = { provider: stored.provider, model: stored.model, manual: stored.manual === true };
+            storedEffort = readStoredEffort(stored.provider, stored.model);
+          } else if (catalog !== null && catalog.current !== null) {
+            target = { provider: catalog.current.provider, model: catalog.current.model, manual: false };
+            storedEffort = readStoredEffort(target.provider, target.model);
+          } else if (catalog !== null && catalog.models.length > 0) {
+            target = { provider: catalog.models[0].provider, model: catalog.models[0].model, manual: false };
+            storedEffort = readStoredEffort(target.provider, target.model);
+          }
+          if (target === null) {
+            // No catalog: ask the single-model endpoint for the current route so
+            // the effort row still works on hosts without a model list.
+            const detail = await loadModelDetail(null);
+            if (!alive || detail === null) return;
+            if (detail.provider === '' || detail.model === '') return;
+            const fallback = { provider: detail.provider, model: detail.model, manual: false };
+            setSelection(fallback);
+            applyModelDetail(detail, fallback, readStoredEffort(fallback.provider, fallback.model));
+            return;
+          }
+          setSelection(target);
+          const detail = await loadModelDetail(target);
+          if (!alive || detail === null) return;
+          applyModelDetail(detail, target, storedEffort);
+        })();
+        return () => {
+          alive = false;
+        };
+      }, [loadModelDetail]);
+
+      // Opening the menu refreshes the "current model" while the plugin is
+      // following it; a manual pick (or a lock) makes the choice stay put.
+      react.useEffect(() => {
+        if (!picking || lockSnapshot !== null) return undefined;
+        if (selection !== null && selection.manual === true) return undefined;
+        let alive = true;
+        (async () => {
+          try {
+            const response = await fetch(MODELS_ENDPOINT, { headers: { accept: 'application/json' } });
+            let body = null;
+            try {
+              body = await response.json();
+            } catch {
+              body = null;
+            }
+            const catalog = readModels(body, response.status);
+            if (!alive || !catalog.ok || catalog.current === null) return;
+            setModels(catalog.models);
+            if (selection !== null && selection.provider === catalog.current.provider && selection.model === catalog.current.model) return;
+            const target = { provider: catalog.current.provider, model: catalog.current.model, manual: false };
+            setSelection(target);
+            const detail = await loadModelDetail(target);
+            if (!alive || detail === null) return;
+            applyModelDetail(detail, target, readStoredEffort(target.provider, target.model));
+          } catch {
+            /* keep the old choice when the catalog cannot be refreshed */
           }
         })();
         return () => {
           alive = false;
         };
-      }, []);
+      }, [picking, lockSnapshot, selection, loadModelDetail]);
 
-      const run = react.useCallback(async (flavour, shape, thinking) => {
+      const run = react.useCallback(async (flavour, shape, thinking, target) => {
         const text = typeof draft === 'string' ? draft : '';
         if (text.trim() === '' || busy) return;
         const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -536,7 +918,7 @@ window.__ModuleLoader__.load({
           const response = await fetch(ENDPOINT, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(postBody(text, flavour, shape, thinking, typeof navigator !== 'undefined' ? navigator.language : undefined)),
+            body: JSON.stringify(postBody(text, flavour, shape, thinking, typeof navigator !== 'undefined' ? navigator.language : undefined, target)),
             signal: controller === null ? undefined : controller.signal,
           });
           let body = null;
@@ -596,7 +978,7 @@ window.__ModuleLoader__.load({
           return;
         }
         setPicking(false);
-        void run(style, preset, effort);
+        void run(style, preset, effort, selection);
       };
 
       const choose = (flavour) => {
@@ -608,6 +990,75 @@ window.__ModuleLoader__.load({
         setPreset(shape);
         rememberPreset(shape);
       };
+
+      const chooseModel = async (value) => {
+        if (lockSnapshot !== null) return;
+        let pair = null;
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed) && parsed.length === 2) pair = parsed;
+        } catch {
+          pair = null;
+        }
+        if (pair === null || typeof pair[0] !== 'string' || typeof pair[1] !== 'string') return;
+        const target = { provider: pair[0], model: pair[1], manual: true };
+        setSelection(target);
+        rememberModel(target);
+        const detail = await loadModelDetail(target);
+        if (detail === null) {
+          setEfforts([]);
+          setEffort('');
+          setEffortSource('none');
+          return;
+        }
+        applyModelDetail(detail, target, readStoredEffort(target.provider, target.model));
+      };
+
+      const chooseEffort = (id) => {
+        if (lockSnapshot !== null) return;
+        setEffort(id);
+        setEffortSource('stored');
+        if (selection !== null) rememberEffort(selection.provider, selection.model, id);
+      };
+
+      const toggleLock = () => {
+        if (lockSnapshot !== null) {
+          setLockSnapshot(null);
+          clearStoredLock();
+          return;
+        }
+        if (selection === null) return;
+        const snapshot = { provider: selection.provider, model: selection.model, effort };
+        setLockSnapshot(snapshot);
+        rememberLock(snapshot);
+      };
+
+      const selectionValue = selection === null ? '' : JSON.stringify([selection.provider, selection.model]);
+      const modelOptions = [];
+      {
+        const groups = new Map();
+        for (const item of models) {
+          if (!groups.has(item.provider)) groups.set(item.provider, { name: item.providerName, items: [] });
+          groups.get(item.provider).items.push(item);
+        }
+        for (const group of groups.values()) {
+          modelOptions.push(
+            jsx('optgroup', {
+              key: 'provider:' + group.items[0].provider,
+              label: group.name,
+              children: group.items.map((item) =>
+                jsx('option', { key: item.provider + '/' + item.model, value: JSON.stringify([item.provider, item.model]), children: item.name }),
+              ),
+            }),
+          );
+        }
+        if (modelOptions.length === 0 && selection !== null) {
+          modelOptions.push(jsx('option', { value: JSON.stringify([selection.provider, selection.model]), children: selection.model }));
+        }
+        if (modelOptions.length === 0) {
+          modelOptions.push(jsx('option', { value: '', children: translate('model.empty') }));
+        }
+      }
 
       // One control, two faces: the pill never leaves the row, the menu floats
       // above it. Keeping the pill mounted holds the row's height and the
@@ -653,6 +1104,40 @@ window.__ModuleLoader__.load({
             'data-dsh-prompt-optimizer': 'picker',
             children: [
               jsxs('span', {
+                className: 'dshPo_row dshPo_modelRow',
+                'data-dsh-prompt-optimizer': 'model-row',
+                children: [
+                  jsx('span', { className: 'dshPo_rowLabel', children: translate('model.label') }),
+                  jsx('select', {
+                    className: 'dshPo_select',
+                    'data-dsh-prompt-optimizer': 'model-select',
+                    value: selectionValue,
+                    disabled: lockSnapshot !== null,
+                    'aria-label': translate('model.label'),
+                    title: translate('model.label'),
+                    onChange: (event) => {
+                      const value =
+                        event !== null && typeof event === 'object' && event.target !== null && typeof event.target === 'object'
+                          ? event.target.value
+                          : '';
+                      void chooseModel(value);
+                    },
+                    children: modelOptions,
+                  }),
+                  jsx('button', {
+                    type: 'button',
+                    className: 'dshPo_lock',
+                    'data-dsh-prompt-optimizer': 'lock',
+                    'data-locked': lockSnapshot !== null ? 'true' : 'false',
+                    role: 'switch',
+                    'aria-checked': lockSnapshot !== null ? 'true' : 'false',
+                    title: translate(lockSnapshot !== null ? 'model.unlockHint' : 'model.lockHint'),
+                    onClick: toggleLock,
+                    children: translate(lockSnapshot !== null ? 'model.locked' : 'model.lock'),
+                  }),
+                ],
+              }),
+              jsxs('span', {
                 className: 'dshPo_row',
                 children: [
                   ...STYLE_IDS.map((id) => chip('style', id)),
@@ -676,12 +1161,24 @@ window.__ModuleLoader__.load({
                           'data-active': effort === item.id ? 'true' : 'false',
                           role: 'menuitemradio',
                           'aria-checked': effort === item.id ? 'true' : 'false',
+                          disabled: lockSnapshot !== null,
                           title: translate('effort.hint'),
-                          onClick: () => setEffort(item.id),
+                          onClick: () => chooseEffort(item.id),
                           children: jsx('span', { className: 'dshPo_chipName', children: item.name }),
                         }),
                       ),
-                      jsx('span', { className: 'dshPo_effortDefault', children: translate('effort.default') }),
+                      jsx('span', {
+                        className: 'dshPo_effortDefault',
+                        children: translate(
+                          effortSource === 'stored'
+                            ? 'effort.fromStored'
+                            : effortSource === 'model'
+                              ? 'effort.fromModel'
+                              : effortSource === 'fallback'
+                                ? 'effort.fromFallback'
+                                : 'effort.default',
+                        ),
+                      }),
                     ],
                   }),
               jsxs('button', {
@@ -820,7 +1317,10 @@ window.__ModuleLoader__.load({
     exports.NS = NS;
     exports.ENDPOINT = ENDPOINT;
     exports.MODEL_ENDPOINT = MODEL_ENDPOINT;
+    exports.MODELS_ENDPOINT = MODELS_ENDPOINT;
     exports.readModel = readModel;
+    exports.readModels = readModels;
+    exports.resolveEffort = resolveEffort;
     exports.ENTRY_ID = ENTRY_ID;
     exports.CSS_TAG = CSS_TAG;
     exports.CSS = CSS;
@@ -835,6 +1335,17 @@ window.__ModuleLoader__.load({
     exports.rememberPreset = rememberPreset;
     exports.readStoredStyle = readStoredStyle;
     exports.rememberStyle = rememberStyle;
+    exports.MODEL_STORAGE_KEY = MODEL_STORAGE_KEY;
+    exports.LOCK_STORAGE_KEY = LOCK_STORAGE_KEY;
+    exports.EFFORT_STORAGE_PREFIX = EFFORT_STORAGE_PREFIX;
+    exports.readStoredModel = readStoredModel;
+    exports.rememberModel = rememberModel;
+    exports.readStoredLock = readStoredLock;
+    exports.rememberLock = rememberLock;
+    exports.clearStoredLock = clearStoredLock;
+    exports.effortStorageKey = effortStorageKey;
+    exports.readStoredEffort = readStoredEffort;
+    exports.rememberEffort = rememberEffort;
     exports.postBody = postBody;
     exports.readResult = readResult;
     exports.translator = translator;
