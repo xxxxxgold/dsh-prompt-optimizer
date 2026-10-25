@@ -960,24 +960,27 @@ export function apply(ctx, config) {
       if (inFlight >= settings.maxConcurrent) {
         return sendJson(res, 429, { ok: false, error: { code: 'BUSY', message: '同时锻造的人太多了，稍后再来' } });
       }
-      let payload;
-      try {
-        payload = JSON.parse((await readBody(req)) || '{}');
-      } catch (error) {
-        return sendJson(res, 400, { ok: false, error: { code: 'BAD_JSON', message: String(error && error.message ? error.message : error) } });
-      }
-      const text = payload !== null && typeof payload === 'object' && typeof payload.text === 'string' ? payload.text : '';
-      if (text.trim() === '') {
-        return sendJson(res, 400, { ok: false, error: { code: 'EMPTY_INPUT', message: '输入框是空的，没东西可锻' } });
-      }
-      if (text.length > settings.maxInputChars) {
-        return sendJson(res, 413, {
-          ok: false,
-          error: { code: 'INPUT_TOO_LONG', message: `输入太长了（${text.length} 字，上限 ${settings.maxInputChars} 字）` },
-        });
-      }
+      // Reserve the slot before the first `await`: `readBody` yields to the
+      // event loop, so a check made before it lets a whole burst through the
+      // ceiling at once. Everything below releases it in the `finally`.
       inFlight += 1;
       try {
+        let payload;
+        try {
+          payload = JSON.parse((await readBody(req)) || '{}');
+        } catch (error) {
+          return sendJson(res, 400, { ok: false, error: { code: 'BAD_JSON', message: String(error && error.message ? error.message : error) } });
+        }
+        const text = payload !== null && typeof payload === 'object' && typeof payload.text === 'string' ? payload.text : '';
+        if (text.trim() === '') {
+          return sendJson(res, 400, { ok: false, error: { code: 'EMPTY_INPUT', message: '输入框是空的，没东西可锻' } });
+        }
+        if (text.length > settings.maxInputChars) {
+          return sendJson(res, 413, {
+            ok: false,
+            error: { code: 'INPUT_TOO_LONG', message: `输入太长了（${text.length} 字，上限 ${settings.maxInputChars} 字）` },
+          });
+        }
         const usedStyle = STYLES.has(payload.style) ? payload.style : settings.style;
         const usedPreset = PRESETS.has(payload.preset) ? payload.preset : settings.preset;
         const usedEffort = typeof payload.reasoningEffort === 'string' ? payload.reasoningEffort : '';

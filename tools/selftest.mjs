@@ -389,6 +389,70 @@ function mountHost(llm, config, agentDefaultModel) {
   check('an unknown route answers 404', missing.statusCode === 404 && missing.json().error.code === 'NOT_FOUND', missing.body);
 }
 
+// --- POST /optimize, the concurrency ceiling ------------------------------
+{
+  const handler = mountHost(fakeLlm([{ type: 'text-delta', text: '哥们冲 gogogo 一次性交付' }]), { maxConcurrent: 1 });
+
+  // A request whose body has not arrived yet: it parks inside `readBody`, which
+  // is exactly the await that used to let a burst past the ceiling.
+  let release = null;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const stalled = {
+    method: 'POST',
+    url: '/dsh-prompt-optimizer/optimize',
+    headers: {},
+    async *[Symbol.asyncIterator]() {
+      await gate;
+      yield Buffer.from(JSON.stringify({ text: '写个周报' }), 'utf8');
+    },
+  };
+  const first = fakeResponse();
+  const firstRun = handler(stalled, first);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const second = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写个周报' })), second);
+  check('a second rewrite is refused while the first holds the slot', second.statusCode === 429 && second.json().error.code === 'BUSY', second.body);
+
+  release();
+  await firstRun;
+  check('the stalled rewrite still answers once its body lands', first.statusCode === 200 && first.json().ok === true, first.body);
+
+  const third = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写个周报' })), third);
+  check('the slot is released after the first rewrite finishes', third.statusCode === 200, third.body);
+
+  // Every other exit has to hand the slot back as well: a leaked refusal would
+  // turn the next legitimate rewrite into a 429.
+  const refused = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '   ' })), refused);
+  check('a refused draft answers 400', refused.statusCode === 400 && refused.json().error.code === 'EMPTY_INPUT', refused.body);
+  const afterRefusal = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写个周报' })), afterRefusal);
+  check('a 400 hands the slot back', afterRefusal.statusCode === 200, afterRefusal.body);
+
+  const oversized = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: 'x'.repeat(H.DEFAULTS.maxInputChars + 1) })), oversized);
+  check('an oversized draft answers 413', oversized.statusCode === 413 && oversized.json().error.code === 'INPUT_TOO_LONG', oversized.body);
+  const afterOversized = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写个周报' })), afterOversized);
+  check('a 413 hands the slot back', afterOversized.statusCode === 200, afterOversized.body);
+}
+
+// --- POST /optimize, a failing rewrite must free the slot too --------------
+{
+  const failing = mountHost(fakeLlm([], { throwOnStream: true }), { maxConcurrent: 1, localFallback: false });
+  const boom = fakeResponse();
+  await failing(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写个周报' })), boom);
+  check('a failing rewrite answers 502', boom.statusCode === 502 && boom.json().ok === false, boom.body);
+  // A 429 here would mean the slot leaked; 502 proves the next one got through.
+  const afterBoom = fakeResponse();
+  await failing(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写个周报' })), afterBoom);
+  check('a 502 hands the slot back', afterBoom.statusCode === 502, afterBoom.body);
+}
+
 // --- POST /optimize, no llm service at all --------------------------------
 {
   const handler = mountHost(undefined, undefined);
