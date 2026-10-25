@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.3.2';
+const VERSION = '0.4.0';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
@@ -597,7 +597,7 @@ export async function optimize(ctx, config, text, style, preset) {
   // a hardened brief is ~300–500, but the adapter bills thinking tokens against
   // the same ceiling. 1600 was leaving nothing for the answer.
   const budget = structured ? Math.max(config.maxTokens, 8000) : Math.max(config.maxTokens, 4000);
-  const request = budget === config.maxTokens ? config : { ...config, maxTokens: budget };
+  let request = budget === config.maxTokens ? config : { ...config, maxTokens: budget };
   let warning = null;
   let llm;
   try {
@@ -652,6 +652,13 @@ export async function optimize(ctx, config, text, style, preset) {
             ms: Date.now() - started,
             warning: { code: 'TRUNCATED', message: '模型输出撞到长度上限，已交付截断前的部分' },
           };
+        }
+        // An adapter that does not advertise this thinking budget rejects the
+        // call outright; retry once without the hint rather than losing the run.
+        if (request.reasoningEffort !== undefined && /REASONING|UNSUPPORTED/i.test(warning.code)) {
+          request = { ...request, reasoningEffort: undefined };
+          warning = null;
+          continue;
         }
         // A stale route is worth exactly one rediscovery.
         const discovered = warning.code === 'NO_ADAPTER' && attempt === 0 ? await resolveRoute(ctx, { ...config, provider: '', model: '' }) : null;

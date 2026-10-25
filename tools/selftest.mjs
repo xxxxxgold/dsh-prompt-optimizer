@@ -504,10 +504,16 @@ check(
   !/dshPo_cancel/.test(clientExports.CSS),
 );
 {
-  const pick = clientExports.CSS.match(/\.dshPo_pick\{[^}]*\}/);
+  const row = clientExports.CSS.match(/\.dshPo_row\{[^}]*\}/);
   check(
     'the flavours sit in one row that never wraps',
-    pick !== null && /flex-direction:row/.test(pick[0]) && /flex-wrap:nowrap/.test(pick[0]),
+    row !== null && /flex-direction:row/.test(row[0]) && /flex-wrap:nowrap/.test(row[0]),
+    row === null ? 'no rule' : row[0].slice(0, 120),
+  );
+  const pick = clientExports.CSS.match(/\.dshPo_pick\{[^}]*\}/);
+  check(
+    'the panel stacks the chips above a confirm button',
+    pick !== null && /flex-direction:column/.test(pick[0]),
     pick === null ? 'no rule' : pick[0].slice(0, 120),
   );
   check(
@@ -567,7 +573,9 @@ check(
   const tree = mod.HardForge({ useInput: () => '写个周报', inputActions: { setDraft: () => {} }, t: undefined });
   const pill = tree.props.children[0];
   const picker = tree.props.children[1];
-  const chips = (picker.props.children || []).filter(
+  const row = picker.props.children[0];
+  const forgeButton = picker.props.children[1];
+  const chips = (row.props.children || []).filter(
     (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
   );
   check(
@@ -595,13 +603,11 @@ check(
     chips.every((chip) => typeof chip.props.onClick === 'function'),
   );
   check(
-    'the menu is two groups in one row',
-    picker.props.children.length === 8 &&
-      picker.props.children.filter((child) => child.props.className === 'dshPo_chip').length === 7 &&
-      picker.props.children[3].props.className === 'dshPo_sep',
-    String(picker.props.children.length),
+    'the menu is two groups in one row plus a confirm button',
+    row.props.children.length === 8 && forgeButton.props.className === 'dshPo_go',
+    String(row.props.children.length) + '/' + forgeButton.props.className,
   );
-  const presetChips = picker.props.children.filter((child) => child.props['data-preset'] !== undefined);
+  const presetChips = row.props.children.filter((child) => child.props['data-preset'] !== undefined);
   check(
     'the shape chips are native, feat, issue, refactor in that order',
     presetChips.map((chip) => chip.props['data-preset']).join(',') === 'native,feat,issue,refactor',
@@ -619,8 +625,7 @@ check(
   );
   check(
     'a divider separates the two groups',
-    picker.props.children[3].props.className === 'dshPo_sep' &&
-      picker.props.children[3].props['aria-hidden'] === 'true',
+    row.props.children[3].props.className === 'dshPo_sep' && row.props.children[3].props['aria-hidden'] === 'true',
   );
   check(
     'the shape chips are wired to their own handler',
@@ -709,20 +714,37 @@ check(
     throw new Error('unexpected require: ' + specifier);
   });
   const openTree = openMod.HardForge({ useInput: () => '', inputActions: { setDraft: () => {} }, t: undefined });
-  const chips = (openTree.props.children[1].props.children || []).filter(
+  const openMenu = openTree.props.children[1];
+  const openRow = openMenu.props.children[0];
+  const chips = (openRow.props.children || []).filter(
     (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
   );
   calls.length = 0;
   chips[0].props.onClick();
   check(
-    'picking a flavour on an empty box explains itself',
+    'picking a flavour only remembers it, the menu stays open',
+    calls.some((call) => call.index === 3 && call.next === 'hard') &&
+      !calls.some((call) => call.index === 2),
+    JSON.stringify(calls.map((call) => call.index + ':' + String(call.next))),
+  );
+  const forgeOnEmpty = openMenu.props.children[1].props.onClick;
+  calls.length = 0;
+  forgeOnEmpty();
+  check(
+    'forging an empty box explains itself',
     calls.some((call) => call.index === 1 && typeof call.next === 'string' && call.next.length > 0) &&
       calls.some((call) => call.index === 0 && call.next === 'error'),
     JSON.stringify(calls.map((call) => call.index + ':' + String(call.next))),
   );
+  const presetChipsOnEmpty = (openRow.props.children || []).filter(
+    (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-preset'] !== undefined,
+  );
+  calls.length = 0;
+  presetChipsOnEmpty[1].props.onClick();
   check(
-    'and it still remembers the flavour it picked',
-    calls.some((call) => call.index === 3 && call.next === 'hard'),
+    'picking a shape remembers it without closing the menu',
+    calls.some((call) => call.index === 4 && call.next === 'feat') && !calls.some((call) => call.index === 2),
+    JSON.stringify(calls.map((call) => call.index + ':' + String(call.next))),
   );
 }
 
@@ -827,5 +849,31 @@ check(
 }
 
 // ---------------------------------------------------------------------------
+// --- adapters that reject the thinking budget ------------------------------
+section('effort fallback');
+
+{
+  const seen = [];
+  const llm = {
+    listProviders: () => [{ id: 'fake-provider', name: 'Fake' }],
+    listModels: async (provider) => [{ provider, id: 'fake-model' }],
+    stream: (options) => {
+      seen.push(options);
+      if (seen.length === 1) throw Object.assign(new Error('no such effort'), { code: 'UNSUPPORTED_REASONING_EFFORT' });
+      return (async function* generate() {
+        yield { type: 'text-delta', index: 0, text: HARDENED };
+        yield { type: 'finish', reason: { kind: 'stop' } };
+      })();
+    },
+  };
+  const handler = mountHost(llm, undefined);
+  const res = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写一个网页' })), res);
+  const body = res.json();
+  check('an adapter without this effort still answers', body.ok === true && body.text === HARDENED, JSON.stringify(body).slice(0, 120));
+  check('the effort is sent first', seen[0].reasoningEffort === H.DEFAULTS.reasoningEffort, String(seen[0].reasoningEffort));
+  check('the retry drops the effort', seen.length === 2 && seen[1].reasoningEffort === undefined, String(seen.length));
+}
+
 console.log('\n' + (failed === 0 ? 'PASS' : 'FAIL') + ' — ' + passed + ' passed, ' + failed + ' failed');
 process.exitCode = failed === 0 ? 0 : 1;

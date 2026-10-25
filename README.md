@@ -15,7 +15,7 @@
 
 ## 30 秒看懂
 
-DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它，菜单一屏两行：上行选**口味**（`hard` / `team` / `cool`），下行选**产出规范**（原生 / 需求 / 缺陷 / 重构），点哪个立刻按哪套开锻：
+DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出一块面板：一行**口味**（`hard` / `team` / `cool`），一行**产出规范**（原生 / 需求 / 缺陷 / 重构），两行随便点、**面板不会关**，选好了再按底下的「**开锻**」：
 
 ```
 你的草稿  →  模型重写  →  硬汉任务书  →  直接写回输入框
@@ -203,7 +203,7 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 | `team`（菜单里叫「肌肉集团」） | 肌肉集团总动员：拆成可并行的几块、成员自己起炫酷名字、分开干再拼装。原文没提团队时只说「能并行就并行」，不编成员名 |
 | `cool`（菜单里叫「雷霆炫酷」） | 雷霆炫酷：视觉/体验类要求强调拉爆、榨干、严丝合缝，但不新增具体参数 |
 
-菜单横向一行摆开三个口味，不换行；窗口窄的时候菜单整体加宽（上限 560px 或 92vw，再多就横向滑动）。中文界面显示中文名，英文界面显示 hard / team / cool，配置里的 `"style"` 值始终是这三个英文 id。
+口味三个横向一行摆开、不换行；窗口窄的时候整行横向滑动。选 chip 只改高亮，不触发请求，也不会把面板关掉 —— 两个维度可以慢慢挑完再开锻。中文界面显示中文名，英文界面显示 hard / team / cool，配置里的 `"style"` 值始终是这三个英文 id。
 
 ### 产出规范：一按就成 Trellis 任务书
 
@@ -288,7 +288,7 @@ POST /dsh-prompt-optimizer/optimize
 git clone https://github.com/asdnmy123/dsh-prompt-optimizer.git
 cd dsh-prompt-optimizer
 
-# 硬规矩：不全绿不许合。零依赖，离线 158 项。
+# 硬规矩：不全绿不许合。零依赖，离线 165 项。
 node tools/selftest.mjs
 
 # 重出按钮截图（真 client.js + 真样式表，无头 Edge）
@@ -301,7 +301,7 @@ $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 CI：[`.github/workflows/selftest.yml`](.github/workflows/selftest.yml) 在 Node 18/20/22 上跑自测 + 语法体检。
 
-**验证覆盖**（158 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
+**验证覆盖**（165 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
 
 其中外观有三道锁：
 
@@ -328,7 +328,7 @@ index.js                   宿主半：HTTP 面 + 提示词锻造 + 路由/降�
 client.js                  客户端半：♂harden 按钮 + 样式 + 插槽注册
 cordis.patch.yml           挂载声明：往 profile 里插一行 loader
 package.json               dsh.bundle.patch / dsh.client 声明
-tools/selftest.mjs         离线自测（158 项）
+tools/selftest.mjs         离线自测（165 项）
 tools/preview.html         真组件预览 + 计算样式探测
 tools/asar.mjs             Electron ASAR 迷你读取器（本地侦察用）
 preview/harden-button.png  四态 + 菜单截图

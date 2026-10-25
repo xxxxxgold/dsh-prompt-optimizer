@@ -134,6 +134,7 @@ window.__ModuleLoader__.load({
       'button.error': LABEL,
       'button.title': '点一下选口味与规范：口味 硬汉/肌肉集团/雷霆炫酷，规范 原生/需求/缺陷/重构',
       'button.titleBusy': '正在锻造，别催，马上给你硬的',
+      'button.forge': '开锻',
       'style.hard': '硬汉',
       'style.team': '肌肉集团',
       'style.cool': '雷霆炫酷',
@@ -164,6 +165,7 @@ window.__ModuleLoader__.load({
       'button.error': LABEL,
       'button.title': 'Pick a flavour and a shape — hard/team/cool · plain/feat/issue/refactor',
       'button.titleBusy': 'Forging — hold on, it will come out hard',
+      'button.forge': 'Forge',
       'style.hard': 'hard',
       'style.team': 'team',
       'style.cool': 'cool',
@@ -261,7 +263,8 @@ window.__ModuleLoader__.load({
       '60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}',
       // Flavour picker: opens upward from the pill, three chips in ONE row.
       '.dshPo_root{position:relative}',
-      '.dshPo_pick{position:absolute;bottom:calc(100% + 8px);left:0;z-index:40;display:flex;flex-direction:row;flex-wrap:nowrap;',
+      '.dshPo_pick{position:absolute;bottom:calc(100% + 8px);left:0;z-index:40;display:flex;flex-direction:column;gap:6px;',
+      'align-items:stretch;',
       'gap:6px;width:max-content;max-width:min(94vw,660px);overflow-x:auto;overflow-y:hidden;padding:6px;border-radius:14px;',
       'border:1px solid rgba(255,106,0,.28);',
       'background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-base,#1c1d21));',
@@ -274,7 +277,15 @@ window.__ModuleLoader__.load({
       '.dshPo_chip:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
       '.dshPo_chip[data-active=true]{background:linear-gradient(135deg,rgba(255,106,0,.20),rgba(168,85,247,.18));border-color:rgba(255,106,0,.44)}',
       '.dshPo_chipName{font-size:var(--dsh-content-font-size-secondary,13px);font-weight:700;letter-spacing:.3px}',
+      '.dshPo_row{display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;align-items:center;overflow-x:auto}',
       '.dshPo_sep{flex:0 0 auto;width:1px;align-self:stretch;margin:2px 1px;border-radius:1px;background:rgba(255,106,0,.30)}',
+      '.dshPo_go{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;',
+      'padding:8px 12px;border-radius:10px;border:1px solid rgba(255,106,0,.55);cursor:pointer;font:inherit;font-weight:700;',
+      'color:#fff;background:linear-gradient(120deg,#ff6a00,#ff2d55 55%,#a855f7);',
+      'box-shadow:0 3px 12px rgba(255,90,0,.30)}',
+      '.dshPo_go:hover:not(:disabled){filter:brightness(1.06) saturate(1.1)}',
+      '.dshPo_go:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}',
+      '.dshPo_goHint{font-weight:400;opacity:.9;font-size:var(--dsh-content-font-size-caption,12px)}',
       // The transient one-line result note beside the pill.
       '.dshPo_note{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
       'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -509,27 +520,27 @@ window.__ModuleLoader__.load({
         setPicking((open) => !open);
       };
 
-      const forge = (flavour, shape) => {
-        setPicking(false);
+      // Picking a chip is a *selection*, not a commit: the menu stays open so
+      // the other row can be picked too. Only the forge button spends a call.
+      const forge = () => {
         if (empty) {
-          // Picked something with nothing to forge: say so instead of going quiet.
+          // Nothing to forge: say so instead of going quiet.
           setNote(translate('state.empty'));
           setPhase('error');
           return;
         }
-        void run(flavour, shape);
+        setPicking(false);
+        void run(style, preset);
       };
 
       const choose = (flavour) => {
         setStyle(flavour);
         rememberStyle(flavour);
-        forge(flavour, preset);
       };
 
       const choosePreset = (shape) => {
         setPreset(shape);
         rememberPreset(shape);
-        forge(style, shape);
       };
 
       // One control, two faces: the pill never leaves the row, the menu floats
@@ -575,9 +586,26 @@ window.__ModuleLoader__.load({
             role: 'menu',
             'data-dsh-prompt-optimizer': 'picker',
             children: [
-              ...STYLE_IDS.map((id) => chip('style', id)),
-              jsx('span', { className: 'dshPo_sep', 'aria-hidden': 'true' }),
-              ...PRESET_IDS.map((id) => chip('preset', id)),
+              jsxs('span', {
+                className: 'dshPo_row',
+                children: [
+                  ...STYLE_IDS.map((id) => chip('style', id)),
+                  jsx('span', { className: 'dshPo_sep', 'aria-hidden': 'true' }),
+                  ...PRESET_IDS.map((id) => chip('preset', id)),
+                ],
+              }),
+              jsxs('button', {
+                type: 'button',
+                className: 'dshPo_go',
+                'data-dsh-prompt-optimizer': 'forge',
+                disabled: busy,
+                title: translate('button.forge'),
+                onClick: forge,
+                children: [
+                  jsx('span', { children: translate('button.forge') }),
+                  jsx('span', { className: 'dshPo_goHint', children: '· ' + translate('style.' + style) + ' / ' + translate('preset.' + preset) }),
+                ],
+              }),
             ],
           })
         : null;
