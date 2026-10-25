@@ -244,8 +244,9 @@ function mountHost(llm, config, agentDefaultModel) {
   check('the model call carries a system prompt', typeof call.system === 'string' && call.system.includes('硬汉提示词锻造炉'));
   check('the model call carries one request-only user input', Array.isArray(call.messages) && call.messages.length === 1 && call.messages[0].role === 'user' && call.messages[0].id === undefined);
   check('the model call carries the fenced draft', call.messages[0].content[0].text.includes('<原始需求>\n写一个网页\n</原始需求>'));
-  check('the model call sets a sampling ceiling', call.maxTokens === H.DEFAULTS.maxTokens && typeof call.temperature === 'number');
-  check('the model call declares its purpose', call.purpose === 'prompt-optimizer');
+  check('the native call gets room for the answer', call.maxTokens >= 4000 && typeof call.temperature === 'number', String(call.maxTokens));
+  check('the model call asks for a low thinking budget', call.reasoningEffort === H.DEFAULTS.reasoningEffort, String(call.reasoningEffort));
+  check('the model call leaves the undeclared purpose out', call.purpose === undefined, String(call.purpose));
   check('the model call carries an abort signal', call.signal instanceof AbortSignal);
 }
 

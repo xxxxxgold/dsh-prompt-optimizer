@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.3.1';
+const VERSION = '0.3.2';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
@@ -47,6 +47,12 @@ const DEFAULTS = {
   maxInputChars: 20000,
   /** Output ceiling for one rewrite. */
   maxTokens: 1600,
+  /**
+   * Thinking budget handed to the adapter. `low` keeps the chain-of-thought from
+   * eating the output window before the answer starts; empty means "let the
+   * adapter decide".
+   */
+  reasoningEffort: 'low',
   /** One rewrite may take this long before the call is aborted. */
   timeoutMs: 180000,
   /** Sampling temperature: rewrite wants a little heat, not chaos. */
@@ -388,6 +394,7 @@ export function normalizeConfig(config) {
     model: hasRoute ? model : '',
     maxInputChars: Math.floor(pickNumber('maxInputChars', 16)),
     maxTokens: Math.floor(pickNumber('maxTokens', 16)),
+    reasoningEffort: typeof raw.reasoningEffort === 'string' ? raw.reasoningEffort.trim() : DEFAULTS.reasoningEffort,
     timeoutMs: Math.min(Math.floor(pickNumber('timeoutMs', 1000)), 2 ** 31 - 1),
     temperature: Math.min(Math.max(Number.isFinite(Number(raw.temperature)) ? Number(raw.temperature) : DEFAULTS.temperature, 0), 2),
     style: STYLES.has(raw.style) ? raw.style : DEFAULTS.style,
@@ -525,7 +532,9 @@ export async function streamRewrite(llm, route, system, user, config) {
       messages: [{ role: 'user', content: [{ type: 'text', text: user }] }],
       maxTokens: config.maxTokens,
       temperature: config.temperature,
-      purpose: 'prompt-optimizer',
+      ...(typeof config.reasoningEffort === 'string' && config.reasoningEffort !== ''
+        ? { reasoningEffort: config.reasoningEffort }
+        : {}),
       signal: controller.signal,
     });
     for await (const chunk of stream) {
@@ -584,9 +593,10 @@ export async function optimize(ctx, config, text, style, preset) {
   const flavour = STYLES.has(style) ? style : config.style;
   const shape = PRESETS.has(preset) ? preset : config.preset;
   const structured = shape !== 'native';
-  // A task card is ~800–1100 characters of Chinese: the one-paragraph budget
-  // would truncate it mid-section, so the structured shapes get a floor.
-  const budget = structured ? Math.max(config.maxTokens, 2400) : config.maxTokens;
+  // Both shapes need real room: a task card is ~800–1100 Chinese characters and
+  // a hardened brief is ~300–500, but the adapter bills thinking tokens against
+  // the same ceiling. 1600 was leaving nothing for the answer.
+  const budget = structured ? Math.max(config.maxTokens, 8000) : Math.max(config.maxTokens, 4000);
   const request = budget === config.maxTokens ? config : { ...config, maxTokens: budget };
   let warning = null;
   let llm;

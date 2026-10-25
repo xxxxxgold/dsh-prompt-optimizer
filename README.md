@@ -247,7 +247,8 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 | `style` | `hard` | 口味；非法值回落到 `hard` |
 | `preset` | `native` | 产出规范；非法值回落到 `native`。`native` 以外必须够得着模型 |
 | `provider` / `model` | 空 | 显式模型路由。留空则依次试 `ctx.agentDefaultModel` → 适配器目录里第一个有模型的 route |
-| `maxTokens` | `1600` | 单次输出上限 |
+| `maxTokens` | `1600` | 单次输出上限；实际调用会按句式抬到 4000（原生）/ 8000（任务书） |
+| `reasoningEffort` | `low` | 思考预算。推理模型默认 `max` 会把输出窗口吃光，本插件固定要 `low` |
 | `temperature` | `0.9` | 采样温度（0–2） |
 | `timeoutMs` | `180000` | 单次调用超时，超时中止 |
 | `maxInputChars` | `20000` | 草稿字符上限，超了 413 |
@@ -287,7 +288,7 @@ POST /dsh-prompt-optimizer/optimize
 git clone https://github.com/asdnmy123/dsh-prompt-optimizer.git
 cd dsh-prompt-optimizer
 
-# 硬规矩：不全绿不许合。零依赖，离线 157 项。
+# 硬规矩：不全绿不许合。零依赖，离线 158 项。
 node tools/selftest.mjs
 
 # 重出按钮截图（真 client.js + 真样式表，无头 Edge）
@@ -300,7 +301,7 @@ $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
 CI：[`.github/workflows/selftest.yml`](.github/workflows/selftest.yml) 在 Node 18/20/22 上跑自测 + 语法体检。
 
-**验证覆盖**（157 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
+**验证覆盖**（158 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理。
 
 其中外观有三道锁：
 
@@ -327,7 +328,7 @@ index.js                   宿主半：HTTP 面 + 提示词锻造 + 路由/降�
 client.js                  客户端半：♂harden 按钮 + 样式 + 插槽注册
 cordis.patch.yml           挂载声明：往 profile 里插一行 loader
 package.json               dsh.bundle.patch / dsh.client 声明
-tools/selftest.mjs         离线自测（157 项）
+tools/selftest.mjs         离线自测（158 项）
 tools/preview.html         真组件预览 + 计算样式探测
 tools/asar.mjs             Electron ASAR 迷你读取器（本地侦察用）
 preview/harden-button.png  四态 + 菜单截图
