@@ -39,7 +39,7 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
@@ -727,6 +727,60 @@ export function apply(ctx, config) {
           preset: settings.preset,
           presets: [...PRESET_IDS],
           localFallback: settings.localFallback,
+        });
+      }
+      if (req.method === 'POST' && route === 'probe') {
+        // Diagnostic: one raw model call, reported verbatim. Answers "did the
+        // adapter think until the budget ran out" without guessing.
+        let payload = {};
+        try {
+          payload = JSON.parse((await readBody(req)) || '{}');
+        } catch {
+          payload = {};
+        }
+        const probeText = typeof payload.text === 'string' && payload.text.trim() !== '' ? payload.text : '用一句话介绍你自己';
+        const probeBudget = Number.isFinite(Number(payload.maxTokens)) ? Math.floor(Number(payload.maxTokens)) : 4000;
+        const probeEffort = typeof payload.reasoningEffort === 'string' ? payload.reasoningEffort : settings.reasoningEffort;
+        const llm = typeof ctx.get === 'function' ? ctx.get('llm') : undefined;
+        if (llm === undefined || llm === null || typeof llm.stream !== 'function') {
+          return sendJson(res, 200, { ok: false, error: { code: 'NO_LLM', message: '宿主没有 llm 服务' } });
+        }
+        const probeRoute = await resolveRoute(ctx, settings);
+        if (probeRoute === null) {
+          return sendJson(res, 200, { ok: false, error: { code: 'NO_ROUTE', message: '没有可用路由' } });
+        }
+        const started = Date.now();
+        let text = '';
+        let finish = null;
+        let usage = null;
+        try {
+          const stream = llm.stream({
+            provider: probeRoute.provider,
+            model: probeRoute.model,
+            messages: [{ role: 'user', content: [{ type: 'text', text: probeText }] }],
+            maxTokens: probeBudget,
+            temperature: 0.7,
+            ...(typeof probeEffort === 'string' && probeEffort !== '' ? { reasoningEffort: probeEffort } : {}),
+          });
+          for await (const chunk of stream) {
+            if (chunk === null || typeof chunk !== 'object') continue;
+            if (chunk.type === 'text-delta' && typeof chunk.text === 'string') text += chunk.text;
+            else if (chunk.type === 'finish') finish = chunk.reason === undefined ? null : chunk.reason;
+            else if (chunk.type === 'usage') usage = chunk.usage;
+          }
+        } catch (error) {
+          return sendJson(res, 200, { ok: false, route: probeRoute, error: failureOf(error), chars: text.length, text: text.slice(0, 300), effort: probeEffort });
+        }
+        return sendJson(res, 200, {
+          ok: true,
+          route: probeRoute,
+          effort: probeEffort,
+          maxTokens: probeBudget,
+          chars: text.length,
+          finish,
+          usage,
+          ms: Date.now() - started,
+          text: text.slice(0, 400),
         });
       }
       if (req.method !== 'POST' || route !== 'optimize') {

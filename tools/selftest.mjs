@@ -849,6 +849,24 @@ check(
 }
 
 // ---------------------------------------------------------------------------
+// --- the diagnostic probe --------------------------------------------------
+section('probe route');
+
+{
+  const llm = fakeLlm([
+    { type: 'text-delta', index: 0, text: '哥们儿在这儿' },
+    { type: 'usage', usage: { inputTokens: 3, outputTokens: 5 } },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]);
+  const handler = mountHost(llm, undefined);
+  const res = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/probe', JSON.stringify({ text: '你好', maxTokens: 1234 })), res);
+  const body = res.json();
+  check('the probe answers with what the model did', body.ok === true && body.chars === 6, JSON.stringify(body).slice(0, 160));
+  check('the probe reports the finish reason', body.finish !== null && body.finish.kind === 'stop', JSON.stringify(body.finish));
+  check('the probe honours the budget it was given', llm.record.calls[0].maxTokens === 1234, String(llm.record.calls[0].maxTokens));
+}
+
 // --- adapters that reject the thinking budget ------------------------------
 section('effort fallback');
 
