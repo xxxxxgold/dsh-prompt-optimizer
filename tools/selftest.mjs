@@ -244,8 +244,8 @@ function mountHost(llm, config, agentDefaultModel) {
   check('the model call carries a system prompt', typeof call.system === 'string' && call.system.includes('硬汉提示词锻造炉'));
   check('the model call carries one request-only user input', Array.isArray(call.messages) && call.messages.length === 1 && call.messages[0].role === 'user' && call.messages[0].id === undefined);
   check('the model call carries the fenced draft', call.messages[0].content[0].text.includes('<原始需求>\n写一个网页\n</原始需求>'));
-  check('the native call gets room for the answer', call.maxTokens >= 4000 && typeof call.temperature === 'number', String(call.maxTokens));
-  check('the model call asks for a low thinking budget', call.reasoningEffort === H.DEFAULTS.reasoningEffort, String(call.reasoningEffort));
+  check('the native call leaves the ceiling to the adapter', call.maxTokens === undefined && typeof call.temperature === 'number', String(call.maxTokens));
+  check('the model call inherits the route effort', call.reasoningEffort === undefined, String(call.reasoningEffort));
   check('the model call leaves the undeclared purpose out', call.purpose === undefined, String(call.purpose));
   check('the model call carries an abort signal', call.signal instanceof AbortSignal);
 }
@@ -849,6 +849,35 @@ check(
 }
 
 // ---------------------------------------------------------------------------
+// --- follow the host's model configuration ---------------------------------
+section('model config');
+
+{
+  const llm = fakeLlm([
+    { type: 'text-delta', index: 0, text: HARDENED },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]);
+  const handler = mountHost(llm, undefined, {
+    currentSelection: () => ({ provider: 'seeded', model: 'seeded-model', reasoningEffort: 'max' }),
+  });
+  const res = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写一个网页' })), res);
+  check('the route effort is inherited from the deployment', llm.record.calls[0].reasoningEffort === 'max', String(llm.record.calls[0].reasoningEffort));
+  check('no budget is invented', llm.record.calls[0].maxTokens === undefined, String(llm.record.calls[0].maxTokens));
+}
+
+{
+  const llm = fakeLlm([
+    { type: 'text-delta', index: 0, text: HARDENED },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]);
+  const handler = mountHost(llm, { maxTokens: 1234, reasoningEffort: 'high' });
+  const res = fakeResponse();
+  await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写一个网页' })), res);
+  check('an explicit row budget wins', llm.record.calls[0].maxTokens === 1234, String(llm.record.calls[0].maxTokens));
+  check('an explicit row effort wins', llm.record.calls[0].reasoningEffort === 'high', String(llm.record.calls[0].reasoningEffort));
+}
+
 // --- the diagnostic probe --------------------------------------------------
 section('probe route');
 
@@ -884,12 +913,12 @@ section('effort fallback');
       })();
     },
   };
-  const handler = mountHost(llm, undefined);
+  const handler = mountHost(llm, { reasoningEffort: 'low' });
   const res = fakeResponse();
   await handler(fakeRequest('POST', '/dsh-prompt-optimizer/optimize', JSON.stringify({ text: '写一个网页' })), res);
   const body = res.json();
   check('an adapter without this effort still answers', body.ok === true && body.text === HARDENED, JSON.stringify(body).slice(0, 120));
-  check('the effort is sent first', seen[0].reasoningEffort === H.DEFAULTS.reasoningEffort, String(seen[0].reasoningEffort));
+  check('the effort from the config row is sent first', seen[0].reasoningEffort === 'low', String(seen[0].reasoningEffort));
   check('the retry drops the effort', seen.length === 2 && seen[1].reasoningEffort === undefined, String(seen.length));
 }
 

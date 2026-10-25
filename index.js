@@ -39,20 +39,24 @@ export const inject = ['webServer'];
 const ROUTE_PREFIX = '/dsh-prompt-optimizer';
 
 /** Reported by `GET /health`. Keep in sync with package.json. */
-const VERSION = '0.4.1';
+const VERSION = '0.5.0';
 
 /** Deployment defaults; every field is overridable from the Loader row's config. */
 const DEFAULTS = {
   /** Reject a draft longer than this many characters before spending a call. */
   maxInputChars: 20000,
-  /** Output ceiling for one rewrite. */
-  maxTokens: 1600,
   /**
-   * Thinking budget handed to the adapter. `low` keeps the chain-of-thought from
-   * eating the output window before the answer starts; empty means "let the
-   * adapter decide".
+   * Output ceiling for one rewrite. `0` (the default) means "omit the field and
+   * let the adapter apply the cap it was configured with" — the model row knows
+   * its own context window and output limit far better than a plugin does.
    */
-  reasoningEffort: 'low',
+  maxTokens: 0,
+  /**
+   * Thinking budget. Empty (the default) inherits the route's own
+   * `reasoningEffort` from `agentDefaultModel`; set a string only to override
+   * the deployment on purpose.
+   */
+  reasoningEffort: '',
   /** One rewrite may take this long before the call is aborted. */
   timeoutMs: 180000,
   /** Sampling temperature: rewrite wants a little heat, not chaos. */
@@ -393,7 +397,7 @@ export function normalizeConfig(config) {
     provider: hasRoute ? provider : '',
     model: hasRoute ? model : '',
     maxInputChars: Math.floor(pickNumber('maxInputChars', 16)),
-    maxTokens: Math.floor(pickNumber('maxTokens', 16)),
+    maxTokens: Math.max(0, Math.floor(pickNumber('maxTokens', 16))),
     reasoningEffort: typeof raw.reasoningEffort === 'string' ? raw.reasoningEffort.trim() : DEFAULTS.reasoningEffort,
     timeoutMs: Math.min(Math.floor(pickNumber('timeoutMs', 1000)), 2 ** 31 - 1),
     temperature: Math.min(Math.max(Number.isFinite(Number(raw.temperature)) ? Number(raw.temperature) : DEFAULTS.temperature, 0), 2),
@@ -469,7 +473,13 @@ export async function resolveRoute(ctx, config) {
         typeof selection.model === 'string' &&
         selection.model !== ''
       ) {
-        return { provider: selection.provider, model: selection.model };
+        return {
+          provider: selection.provider,
+          model: selection.model,
+          ...(typeof selection.reasoningEffort === 'string' && selection.reasoningEffort !== ''
+            ? { reasoningEffort: selection.reasoningEffort }
+            : {}),
+        };
       }
     } catch {
       // A broken default model must not stop discovery.
@@ -530,7 +540,7 @@ export async function streamRewrite(llm, route, system, user, config) {
       model: route.model,
       system,
       messages: [{ role: 'user', content: [{ type: 'text', text: user }] }],
-      maxTokens: config.maxTokens,
+      ...(Number.isFinite(config.maxTokens) && config.maxTokens > 0 ? { maxTokens: config.maxTokens } : {}),
       temperature: config.temperature,
       ...(typeof config.reasoningEffort === 'string' && config.reasoningEffort !== ''
         ? { reasoningEffort: config.reasoningEffort }
@@ -593,11 +603,11 @@ export async function optimize(ctx, config, text, style, preset) {
   const flavour = STYLES.has(style) ? style : config.style;
   const shape = PRESETS.has(preset) ? preset : config.preset;
   const structured = shape !== 'native';
-  // Both shapes need real room: a task card is ~800–1100 Chinese characters and
-  // a hardened brief is ~300–500, but the adapter bills thinking tokens against
-  // the same ceiling. 1600 was leaving nothing for the answer.
-  const budget = structured ? Math.max(config.maxTokens, 8000) : Math.max(config.maxTokens, 4000);
-  let request = budget === config.maxTokens ? config : { ...config, maxTokens: budget };
+  // Follow the model's own configuration: an explicit `maxTokens` on the plugin
+  // row wins, otherwise the field stays out of the request and the adapter
+  // materialises the cap it was installed with (context window, output limit,
+  // vendor default). Hard-coding a number here is what starved the answer.
+  let request = config.maxTokens > 0 ? { ...config, maxTokens: config.maxTokens } : config;
   let warning = null;
   let llm;
   try {
@@ -609,6 +619,8 @@ export async function optimize(ctx, config, text, style, preset) {
     const system = buildSystemPrompt(flavour, config.styleHint, shape);
     const user = buildUserPrompt(text, shape);
     let route = await resolveRoute(ctx, config);
+    const wantedEffort = config.reasoningEffort !== '' ? config.reasoningEffort : route !== null && typeof route.reasoningEffort === 'string' ? route.reasoningEffort : '';
+    if (wantedEffort !== '') request = { ...request, reasoningEffort: wantedEffort };
     for (let attempt = 0; attempt < 2 && route !== null; attempt += 1) {
       try {
         const raw = await streamRewrite(llm, route, system, user, request);
@@ -727,6 +739,8 @@ export function apply(ctx, config) {
           preset: settings.preset,
           presets: [...PRESET_IDS],
           localFallback: settings.localFallback,
+          maxTokens: settings.maxTokens > 0 ? settings.maxTokens : 'model',
+          reasoningEffort: settings.reasoningEffort !== '' ? settings.reasoningEffort : 'selection',
         });
       }
       if (req.method === 'POST' && route === 'probe') {
