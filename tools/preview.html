@@ -34,7 +34,7 @@ window.__ModuleLoader__ = { load: function (mod) { captured = mod; } };
   /* A stub React with just enough hook surface for one static render. */
   /* A static render cannot fire events, so `statePlan` seeds the hook order
      (phase, note, picking, style, preset, efforts, effort, models, selection,
-     lock, effortSource) for the cell currently being built. */
+     lock) for the cell currently being built. */
   var statePlan = null;
   var stateCursor = 0;
   var React = {
@@ -173,7 +173,6 @@ window.__ModuleLoader__ = { load: function (mod) { captured = mod; } };
         ],
         { provider: 'deepseek-account', model: 'deepseek-v4.1-flash', manual: false },
         null,
-        'model',
       ],
       null,
     );

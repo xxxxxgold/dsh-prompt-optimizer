@@ -650,9 +650,20 @@ check(
   /prefers-reduced-motion:reduce\)\{[^}]*data-phase=busy\]::before/.test(clientExports.CSS),
 );
 check(
-  'the model row has select and lock styles',
-  /\.dshPo_modelRow\{/.test(clientExports.CSS) && /\.dshPo_select\{/.test(clientExports.CSS) && /\.dshPo_lock\{/.test(clientExports.CSS),
+  'the model row has select and switch styles',
+  /\.dshPo_modelRow\{/.test(clientExports.CSS) && /\.dshPo_select\{/.test(clientExports.CSS) && /\.dshPo_switch\{/.test(clientExports.CSS),
 );
+check(
+  'the flat menu uses compact chips and controls',
+  /\.dshPo_chip\{[^}]*height:26px/.test(clientExports.CSS) &&
+    /\.dshPo_go\{[^}]*height:34px/.test(clientExports.CSS) &&
+    /\.dshPo_switch\{[^}]*width:30px/.test(clientExports.CSS),
+);
+check(
+  'the switch thumb slides when locked',
+  /\.dshPo_switch\[data-locked=true\]::after\{transform:translateX\(14px\)/.test(clientExports.CSS),
+);
+check('the model row carries the effort chips', /\.dshPo_effortChips\{/.test(clientExports.CSS));
 check(
   'dictionaries name the model row in both locales',
   typeof clientExports.zh['model.label'] === 'string' &&
@@ -748,7 +759,10 @@ check(
   const modelSelect = modelRow.props.children.find(
     (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-select',
   );
-  const lockButton = modelRow.props.children.find(
+  const lockWrap = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'lock-wrap',
+  );
+  const lockButton = (lockWrap.props.children || []).find(
     (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'lock',
   );
   check(
@@ -819,12 +833,12 @@ check(
     presetChips.every((chip) => typeof chip.props.onClick === 'function'),
   );
   check(
-    'the picker renders the model effort row',
-    /'effort-row'/.test(clientSource) && /data-effort/.test(clientSource) && /MODEL_ENDPOINT/.test(clientSource),
+    'the picker renders the model effort chips',
+    /'effort-chips'/.test(clientSource) && /data-effort/.test(clientSource) && /MODEL_ENDPOINT/.test(clientSource),
   );
   check(
-    'the effort row sits above the forge button',
-    clientSource.indexOf("'effort-row'") > -1 && clientSource.indexOf("'effort-row'") < clientSource.indexOf("className: 'dshPo_go'"),
+    'the effort chips sit above the forge button',
+    clientSource.indexOf("'effort-chips'") > -1 && clientSource.indexOf("'effort-chips'") < clientSource.indexOf("className: 'dshPo_go'"),
   );
   check(
     'the request body carries the shape',
@@ -867,7 +881,6 @@ check(
     [{ provider: 'p', providerName: 'P', model: 'm', name: 'M' }],
     { provider: 'p', model: 'm', manual: true },
     { provider: 'p', model: 'm', effort: 'max' },
-    'stored',
   ];
   let cursor = 0;
   const stateReact = {
@@ -891,28 +904,31 @@ check(
   const select = modelRow.props.children.find(
     (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-select',
   );
-  const lock = modelRow.props.children.find(
+  const lockWrap = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'lock-wrap',
+  );
+  const lock = (lockWrap.props.children || []).find(
     (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'lock',
   );
-  const effortRow = picker.props.children[2];
-  const effortChips = (effortRow.props.children || []).filter(
+  const lockLabel = (lockWrap.props.children || []).find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props.className === 'dshPo_lockLabel',
+  );
+  const effortChipsWrap = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'effort-chips',
+  );
+  const effortChips = (effortChipsWrap.props.children || []).filter(
     (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-effort'] !== undefined,
   );
   check('a locked menu disables the model select', select.props.disabled === true, String(select.props.disabled));
   check(
     'a locked menu shows the locked switch',
-    lock.props['data-locked'] === 'true' && lock.props['aria-checked'] === 'true' && lock.props.children === '已锁定',
-    JSON.stringify({ locked: lock.props['data-locked'], checked: lock.props['aria-checked'], text: lock.props.children }),
+    lock.props['data-locked'] === 'true' && lock.props['aria-checked'] === 'true' && lockLabel.props.children === '已锁定',
+    JSON.stringify({ locked: lock.props['data-locked'], checked: lock.props['aria-checked'], label: lockLabel.props.children }),
   );
   check(
     'a locked menu disables every effort chip',
     effortChips.length === 2 && effortChips.every((chip) => chip.props.disabled === true),
     JSON.stringify(effortChips.map((chip) => chip.props.disabled)),
-  );
-  check(
-    'a locked menu labels the effort as last picked',
-    /上次设定/.test(JSON.stringify(effortRow.props.children)),
-    JSON.stringify(effortRow.props.children).slice(-160),
   );
 }
 
@@ -947,7 +963,6 @@ check(
     [{ provider: 'p', providerName: 'P', model: 'm', name: 'M' }],
     { provider: 'p', model: 'm', manual: false },
     null,
-    'none',
   ];
   let cursor = 0;
   const stateReact = {
@@ -967,8 +982,9 @@ check(
   });
   const tree = mod.HardForge({ useInput: () => '写个周报', inputActions: { setDraft: () => {} }, t: undefined });
   const picker = tree.props.children[1];
-  const effortRows = (picker.props.children || []).filter(
-    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'effort-row',
+  const modelRow = picker.props.children[0];
+  const effortRows = (modelRow.props.children || []).filter(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'effort-chips',
   );
   check(
     'a model without efforts hides the effort row entirely',

@@ -455,45 +455,43 @@ window.__ModuleLoader__.load({
       '60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}',
       // Flavour picker: opens upward from the pill, three chips in ONE row.
       '.dshPo_root{position:relative}',
-      '.dshPo_pick{position:absolute;bottom:calc(100% + 8px);left:0;z-index:40;display:flex;flex-direction:column;gap:6px;',
-      'align-items:stretch;',
-      'gap:6px;width:max-content;max-width:min(94vw,660px);overflow-x:auto;overflow-y:hidden;padding:6px;border-radius:14px;',
-      'border:1px solid rgba(255,106,0,.28);',
-      'background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-base,#1c1d21));',
-      'box-shadow:0 10px 30px rgba(0,0,0,.34),0 0 0 1px rgba(255,255,255,.04),0 0 22px rgba(255,90,0,.14)}',
-      '.dshPo_chip{display:flex;align-items:center;justify-content:center;flex:0 0 auto;padding:7px 12px;border-radius:10px;',
-      'border:1px solid transparent;background:transparent;font:inherit;text-align:center;white-space:nowrap;cursor:pointer;',
-      'color:var(--dsw-alias-label-primary,inherit);transition:background .14s ease,border-color .14s ease,transform .1s ease}',
-      '.dshPo_chip:hover{background:rgba(255,106,0,.14);border-color:rgba(255,106,0,.34)}',
-      '.dshPo_chip:active{transform:scale(.985)}',
+      '.dshPo_pick{position:absolute;bottom:calc(100% + 6px);left:0;z-index:40;display:flex;flex-direction:column;gap:6px;',
+      'align-items:stretch;width:max-content;max-width:min(94vw,560px);overflow-x:auto;overflow-y:hidden;padding:8px;border-radius:10px;',
+      'border:1px solid rgba(255,255,255,.08);background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-base,#1c1d21));',
+      'box-shadow:0 6px 18px rgba(0,0,0,.22)}',
+      '.dshPo_chip{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;height:26px;padding:0 9px;border-radius:6px;',
+      'border:1px solid transparent;background:transparent;font:inherit;font-size:12px;font-weight:600;letter-spacing:.2px;white-space:nowrap;cursor:pointer;',
+      'color:var(--dsw-alias-label-primary,inherit);transition:background .12s ease,border-color .12s ease}',
+      '.dshPo_chip:hover{background:rgba(255,106,0,.10);border-color:rgba(255,106,0,.24)}',
       '.dshPo_chip:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
-      '.dshPo_chip[data-active=true]{background:linear-gradient(135deg,rgba(255,106,0,.20),rgba(168,85,247,.18));border-color:rgba(255,106,0,.44)}',
-      '.dshPo_chipName{font-size:var(--dsh-content-font-size-secondary,13px);font-weight:700;letter-spacing:.3px}',
-      '.dshPo_row{display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;align-items:center;overflow-x:auto}',
-      '.dshPo_sep{flex:0 0 auto;width:1px;align-self:stretch;margin:2px 1px;border-radius:1px;background:rgba(255,106,0,.30)}',
-      '.dshPo_rowLabel{flex:0 0 auto;font-size:var(--dsh-content-font-size-caption,12px);opacity:.62;letter-spacing:.4px}',
+      '.dshPo_chip[data-active=true]{background:rgba(255,106,0,.16);border-color:rgba(255,106,0,.52)}',
+      '.dshPo_chipName{font-size:12px;font-weight:600;letter-spacing:.2px}',
+      '.dshPo_row{display:flex;flex-direction:row;flex-wrap:nowrap;gap:4px;align-items:center;overflow-x:auto}',
+      '.dshPo_sep{flex:0 0 auto;width:1px;align-self:stretch;margin:2px 2px;border-radius:1px;background:rgba(255,255,255,.10)}',
+      '.dshPo_rowLabel{flex:0 0 auto;font-size:11px;opacity:.55;letter-spacing:.3px}',
       '.dshPo_modelRow{width:100%;gap:6px}',
-      '.dshPo_select{flex:1 1 auto;min-width:0;max-width:340px;height:30px;padding:0 8px;border-radius:8px;',
-      'border:1px solid rgba(255,106,0,.30);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base,#1c1d21));',
-      'color:var(--dsw-alias-label-primary,inherit);font:inherit;font-size:var(--dsh-content-font-size-caption,12px);cursor:pointer}',
+      '.dshPo_select{flex:1 1 auto;min-width:140px;max-width:340px;height:26px;padding:0 6px;border-radius:6px;',
+      'border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);',
+      'color:var(--dsw-alias-label-primary,inherit);font:inherit;font-size:12px;cursor:pointer}',
       '.dshPo_select:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
-      '.dshPo_select:disabled{opacity:.55;cursor:not-allowed}',
-      '.dshPo_lock{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:6px 9px;border-radius:8px;',
-      'border:1px solid rgba(255,106,0,.30);background:transparent;color:var(--dsw-alias-label-primary,inherit);',
-      'font:inherit;font-size:var(--dsh-content-font-size-caption,12px);font-weight:700;letter-spacing:.3px;cursor:pointer;',
-      'transition:background .14s ease,border-color .14s ease,color .14s ease}',
-      '.dshPo_lock:hover{background:rgba(255,106,0,.14);border-color:rgba(255,106,0,.44)}',
-      '.dshPo_lock:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
-      '.dshPo_lock[data-locked=true]{background:linear-gradient(135deg,rgba(255,106,0,.24),rgba(168,85,247,.20));',
-      'border-color:rgba(255,106,0,.58);color:var(--dsw-alias-label-primary,inherit)}',
-      '.dshPo_effortDefault{flex:0 0 auto;margin-left:auto;font-size:var(--dsh-content-font-size-caption,12px);opacity:.5}',
-      '.dshPo_go{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;',
-      'padding:8px 12px;border-radius:10px;border:1px solid rgba(255,106,0,.55);cursor:pointer;font:inherit;font-weight:700;',
-      'color:#fff;background:linear-gradient(120deg,#ff6a00,#ff2d55 55%,#a855f7);',
-      'box-shadow:0 3px 12px rgba(255,90,0,.30)}',
-      '.dshPo_go:hover:not(:disabled){filter:brightness(1.06) saturate(1.1)}',
-      '.dshPo_go:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}',
-      '.dshPo_goHint{font-weight:400;opacity:.9;font-size:var(--dsh-content-font-size-caption,12px)}',
+      '.dshPo_select:disabled{opacity:.5;cursor:not-allowed}',
+      '.dshPo_effortChips{display:flex;flex:0 1 auto;gap:4px;align-items:center;overflow-x:auto}',
+      '.dshPo_effortChips .dshPo_chip{height:24px;padding:0 8px;font-size:11px}',
+      '.dshPo_lockWrap{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto}',
+      '.dshPo_lockLabel{font-size:11px;opacity:.55;white-space:nowrap}',
+      '.dshPo_switch{position:relative;flex:0 0 auto;width:30px;height:16px;padding:0;border-radius:999px;border:1px solid rgba(255,255,255,.16);',
+      'background:rgba(255,255,255,.10);cursor:pointer;transition:background .16s ease,border-color .16s ease}',
+      '.dshPo_switch::after{content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:#fff;transition:transform .16s ease}',
+      '.dshPo_switch[data-locked=true]{background:rgba(255,106,0,.85);border-color:rgba(255,106,0,.9)}',
+      '.dshPo_switch[data-locked=true]::after{transform:translateX(14px)}',
+      '.dshPo_switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
+      '.dshPo_switch:disabled{opacity:.5;cursor:not-allowed}',
+      '.dshPo_go{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:34px;padding:0 12px;',
+      'border-radius:8px;border:0;cursor:pointer;font:inherit;font-size:13px;font-weight:700;',
+      'color:#fff;background:linear-gradient(90deg,#ff6a00,#ff2d55);box-shadow:none}',
+      '.dshPo_go:hover:not(:disabled){filter:brightness(1.04)}',
+      '.dshPo_go:disabled{opacity:.5;cursor:not-allowed}',
+      '.dshPo_goHint{font-weight:400;opacity:.8;font-size:11px}',
       // The transient one-line result note beside the pill.
       '.dshPo_note{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
       'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -710,7 +708,6 @@ window.__ModuleLoader__.load({
       const [models, setModels] = react.useState([]);
       const [selection, setSelection] = react.useState(() => readStoredModel());
       const [lockSnapshot, setLockSnapshot] = react.useState(() => readStoredLock());
-      const [effortSource, setEffortSource] = react.useState('none');
       const abortRef = react.useRef(null);
       // The pill and its menu share one positioned root; the menu is a sibling
       // so the pill stays mounted (and keeps focus) while the menu is open.
@@ -811,7 +808,6 @@ window.__ModuleLoader__.load({
         setEfforts(detail.efforts);
         const resolved = resolveEffort(detail, stored);
         setEffort(resolved.effort);
-        setEffortSource(resolved.source);
       };
 
       // One read of the catalog on mount: which models the host offers, then
@@ -1008,7 +1004,6 @@ window.__ModuleLoader__.load({
         if (detail === null) {
           setEfforts([]);
           setEffort('');
-          setEffortSource('none');
           return;
         }
         applyModelDetail(detail, target, readStoredEffort(target.provider, target.model));
@@ -1017,7 +1012,6 @@ window.__ModuleLoader__.load({
       const chooseEffort = (id) => {
         if (lockSnapshot !== null) return;
         setEffort(id);
-        setEffortSource('stored');
         if (selection !== null) rememberEffort(selection.provider, selection.model, id);
       };
 
@@ -1124,16 +1118,48 @@ window.__ModuleLoader__.load({
                     },
                     children: modelOptions,
                   }),
-                  jsx('button', {
-                    type: 'button',
-                    className: 'dshPo_lock',
-                    'data-dsh-prompt-optimizer': 'lock',
-                    'data-locked': lockSnapshot !== null ? 'true' : 'false',
-                    role: 'switch',
-                    'aria-checked': lockSnapshot !== null ? 'true' : 'false',
-                    title: translate(lockSnapshot !== null ? 'model.unlockHint' : 'model.lockHint'),
-                    onClick: toggleLock,
-                    children: translate(lockSnapshot !== null ? 'model.locked' : 'model.lock'),
+                  efforts.length === 0
+                    ? null
+                    : jsx('span', {
+                        className: 'dshPo_effortChips',
+                        'data-dsh-prompt-optimizer': 'effort-chips',
+                        'aria-label': translate('effort.label'),
+                        children: efforts.map((item) =>
+                          jsxs('button', {
+                            type: 'button',
+                            key: 'effort:' + item.id,
+                            className: 'dshPo_chip',
+                            'data-effort': item.id,
+                            'data-active': effort === item.id ? 'true' : 'false',
+                            role: 'menuitemradio',
+                            'aria-checked': effort === item.id ? 'true' : 'false',
+                            disabled: lockSnapshot !== null,
+                            title: translate('effort.hint'),
+                            onClick: () => chooseEffort(item.id),
+                            children: jsx('span', { className: 'dshPo_chipName', children: item.name }),
+                          }),
+                        ),
+                      }),
+                  jsxs('span', {
+                    className: 'dshPo_lockWrap',
+                    'data-dsh-prompt-optimizer': 'lock-wrap',
+                    children: [
+                      jsx('span', {
+                        className: 'dshPo_lockLabel',
+                        children: translate(lockSnapshot !== null ? 'model.locked' : 'model.lock'),
+                      }),
+                      jsx('button', {
+                        type: 'button',
+                        className: 'dshPo_switch',
+                        'data-dsh-prompt-optimizer': 'lock',
+                        'data-locked': lockSnapshot !== null ? 'true' : 'false',
+                        role: 'switch',
+                        'aria-checked': lockSnapshot !== null ? 'true' : 'false',
+                        'aria-label': translate(lockSnapshot !== null ? 'model.unlockHint' : 'model.lockHint'),
+                        title: translate(lockSnapshot !== null ? 'model.unlockHint' : 'model.lockHint'),
+                        onClick: toggleLock,
+                      }),
+                    ],
                   }),
                 ],
               }),
@@ -1145,42 +1171,6 @@ window.__ModuleLoader__.load({
                   ...PRESET_IDS.map((id) => chip('preset', id)),
                 ],
               }),
-              efforts.length === 0
-                ? null
-                : jsxs('span', {
-                    className: 'dshPo_row',
-                    'data-dsh-prompt-optimizer': 'effort-row',
-                    children: [
-                      jsx('span', { className: 'dshPo_rowLabel', children: translate('effort.label') }),
-                      ...efforts.map((item) =>
-                        jsxs('button', {
-                          type: 'button',
-                          key: 'effort:' + item.id,
-                          className: 'dshPo_chip',
-                          'data-effort': item.id,
-                          'data-active': effort === item.id ? 'true' : 'false',
-                          role: 'menuitemradio',
-                          'aria-checked': effort === item.id ? 'true' : 'false',
-                          disabled: lockSnapshot !== null,
-                          title: translate('effort.hint'),
-                          onClick: () => chooseEffort(item.id),
-                          children: jsx('span', { className: 'dshPo_chipName', children: item.name }),
-                        }),
-                      ),
-                      jsx('span', {
-                        className: 'dshPo_effortDefault',
-                        children: translate(
-                          effortSource === 'stored'
-                            ? 'effort.fromStored'
-                            : effortSource === 'model'
-                              ? 'effort.fromModel'
-                              : effortSource === 'fallback'
-                                ? 'effort.fromFallback'
-                                : 'effort.default',
-                        ),
-                      }),
-                    ],
-                  }),
               jsxs('button', {
                 type: 'button',
                 className: 'dshPo_go',
