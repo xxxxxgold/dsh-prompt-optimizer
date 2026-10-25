@@ -650,8 +650,17 @@ check(
   /prefers-reduced-motion:reduce\)\{[^}]*data-phase=busy\]::before/.test(clientExports.CSS),
 );
 check(
-  'the model row has select and switch styles',
-  /\.dshPo_modelRow\{/.test(clientExports.CSS) && /\.dshPo_select\{/.test(clientExports.CSS) && /\.dshPo_switch\{/.test(clientExports.CSS),
+  'the model row has button and switch styles',
+  /\.dshPo_modelRow\{/.test(clientExports.CSS) && /\.dshPo_modelButton\{/.test(clientExports.CSS) && /\.dshPo_switch\{/.test(clientExports.CSS),
+);
+check(
+  'the model dropdown is themed, not a native select',
+  /\.dshPo_modelList\{/.test(clientExports.CSS) && /\.dshPo_modelOption\{/.test(clientExports.CSS) && !/\.dshPo_select\{/.test(clientExports.CSS),
+);
+check(
+  'the model dropdown defines its own background and text color',
+  /\.dshPo_modelList\{[^}]*background:var\(--dsw-alias-bg-layer-2/.test(clientExports.CSS) &&
+    /\.dshPo_modelList\{[^}]*color:var\(--dsw-alias-label-primary/.test(clientExports.CSS),
 );
 check(
   'the flat menu uses compact chips and controls',
@@ -739,8 +748,24 @@ check(
   box.globalThis = box;
   vm.createContext(box);
   vm.runInContext(clientSource, box, { filename: 'client.js' });
-  // useState order inside HardForge: phase, note, picking, style.
-  const preset = ['idle', '', true, 'cool'];
+  // useState order inside HardForge: phase, note, picking, style, preset,
+  // efforts, effort, models, selection, lockSnapshot, modelOpen.
+  const preset = [
+    'idle',
+    '',
+    true,
+    'cool',
+    'native',
+    [],
+    '',
+    [
+      { provider: 'p', providerName: 'P', model: 'm', name: 'M' },
+      { provider: 'p', providerName: 'P', model: 'm2', name: 'M2' },
+    ],
+    { provider: 'p', model: 'm', manual: true },
+    null,
+    true,
+  ];
   let cursor = 0;
   const stateReact = {
     useState: (initial) => {
@@ -762,8 +787,11 @@ check(
   const picker = tree.props.children[1];
   const row = picker.props.children[1];
   const modelRow = picker.props.children[0];
-  const modelSelect = modelRow.props.children.find(
-    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-select',
+  const modelField = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-field',
+  );
+  const modelSelect = (modelField.props.children || []).find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-button',
   );
   const lockWrap = modelRow.props.children.find(
     (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'lock-wrap',
@@ -780,6 +808,25 @@ check(
     'the lock starts unlocked',
     lockButton.props['data-locked'] === 'false' && lockButton.props['aria-checked'] === 'false',
     JSON.stringify({ locked: lockButton.props['data-locked'], checked: lockButton.props['aria-checked'] }),
+  );
+  const modelList = (modelField.props.children || []).find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-list',
+  );
+  const modelOptions = (modelList.props.children || []).filter(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props.role === 'option',
+  );
+  const modelGroups = (modelList.props.children || []).filter(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props.className === 'dshPo_modelGroup',
+  );
+  check(
+    'the model button opens a themed option list',
+    modelList !== undefined && modelOptions.length === 2 && modelOptions[0].props['data-active'] === 'true',
+    JSON.stringify({ list: Boolean(modelList), options: modelOptions.length }),
+  );
+  check(
+    'the model list groups its options by provider',
+    modelGroups.length === 1 && modelGroups[0].props.children === 'P',
+    JSON.stringify(modelGroups.map((group) => group.props.children)),
   );
   const forgeButton = (picker.props.children || []).find((child) => child !== null && child !== undefined && child.props !== undefined && child.props.className === 'dshPo_go');
   const chips = (row.props.children || []).filter(
@@ -907,8 +954,11 @@ check(
   const tree = mod.HardForge({ useInput: () => '写个周报', inputActions: { setDraft: () => {} }, t: undefined });
   const picker = tree.props.children[1];
   const modelRow = picker.props.children[0];
-  const select = modelRow.props.children.find(
-    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-select',
+  const modelField = modelRow.props.children.find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-field',
+  );
+  const select = (modelField.props.children || []).find(
+    (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'model-button',
   );
   const lockWrap = modelRow.props.children.find(
     (child) => child !== null && child !== undefined && child.props !== undefined && child.props['data-dsh-prompt-optimizer'] === 'lock-wrap',

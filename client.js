@@ -470,11 +470,28 @@ window.__ModuleLoader__.load({
       '.dshPo_sep{flex:0 0 auto;width:1px;align-self:stretch;margin:2px 2px;border-radius:1px;background:rgba(255,255,255,.10)}',
       '.dshPo_rowLabel{flex:0 0 auto;font-size:11px;opacity:.55;letter-spacing:.3px}',
       '.dshPo_modelRow{width:100%;gap:6px}',
-      '.dshPo_select{flex:1 1 auto;min-width:140px;max-width:340px;height:26px;padding:0 6px;border-radius:6px;',
-      'border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);',
-      'color:var(--dsw-alias-label-primary,inherit);font:inherit;font-size:12px;cursor:pointer}',
-      '.dshPo_select:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
-      '.dshPo_select:disabled{opacity:.5;cursor:not-allowed}',
+      '.dshPo_modelField{position:relative;flex:1 1 auto;min-width:200px;max-width:340px}',
+      '.dshPo_modelButton{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;height:26px;padding:0 8px;border-radius:6px;',
+      'border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:var(--dsw-alias-label-primary,inherit);',
+      'font:inherit;font-size:12px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;',
+      'transition:background .12s ease,border-color .12s ease}',
+      '.dshPo_modelButton:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.18)}',
+      '.dshPo_modelButton:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
+      '.dshPo_modelButton:disabled{opacity:.5;cursor:not-allowed}',
+      '.dshPo_modelButton::after{content:"";flex:0 0 auto;width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;',
+      'transform:rotate(45deg) translateY(-2px);opacity:.55}',
+      '.dshPo_modelButtonName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.dshPo_modelList{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:50;max-height:220px;overflow-y:auto;padding:4px;',
+      'border-radius:8px;border:1px solid rgba(255,255,255,.12);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,#26272c));',
+      'color:var(--dsw-alias-label-primary,inherit);box-shadow:0 8px 20px rgba(0,0,0,.28);scrollbar-width:thin}',
+      '.dshPo_modelGroup{display:block;padding:5px 6px 2px;font-size:10px;letter-spacing:.4px;text-transform:uppercase;opacity:.45;white-space:nowrap}',
+      '.dshPo_modelOption{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:26px;padding:0 8px;border:0;border-radius:5px;',
+      'background:transparent;color:inherit;font:inherit;font-size:12px;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.dshPo_modelOption:hover{background:rgba(255,106,0,.10)}',
+      '.dshPo_modelOption[data-active=true]{background:rgba(255,106,0,.16)}',
+      '.dshPo_modelOptionName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.dshPo_modelOptionCheck{flex:0 0 auto;font-size:10px;opacity:.85}',
+      '.dshPo_modelOptionStatic{padding:6px 8px;opacity:.6}',
       '.dshPo_effortChips{display:flex;flex:0 1 auto;gap:4px;align-items:center}',
       '.dshPo_effortChips .dshPo_chip{height:24px;padding:0 8px;font-size:11px}',
       '.dshPo_lockWrap{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto}',
@@ -708,10 +725,14 @@ window.__ModuleLoader__.load({
       const [models, setModels] = react.useState([]);
       const [selection, setSelection] = react.useState(() => readStoredModel());
       const [lockSnapshot, setLockSnapshot] = react.useState(() => readStoredLock());
+      const [modelOpen, setModelOpen] = react.useState(false);
       const abortRef = react.useRef(null);
       // The pill and its menu share one positioned root; the menu is a sibling
       // so the pill stays mounted (and keeps focus) while the menu is open.
       const rootRef = react.useRef(null);
+      // The custom model dropdown anchors to its own field, so a click elsewhere
+      // in the menu can close it without closing the whole picker.
+      const modelFieldRef = react.useRef(null);
 
       // Abandon one in-flight rewrite when the entry unmounts, and clear the
       // transient note timer so a settled state cannot be overwritten later.
@@ -774,6 +795,38 @@ window.__ModuleLoader__.load({
         }
         return undefined;
       }, [picking]);
+
+      // The model dropdown is a second, smaller layer: Escape or a click outside
+      // the field closes it without closing the whole picker.
+      react.useEffect(() => {
+        if (!modelOpen) return undefined;
+        const onKey = (event) => {
+          if (event !== null && typeof event === 'object' && event.key === 'Escape') setModelOpen(false);
+        };
+        const onDown = (event) => {
+          const field = modelFieldRef.current;
+          const target = event !== null && typeof event === 'object' ? event.target : null;
+          if (field !== null && field !== undefined && typeof field.contains === 'function' && target !== null && field.contains(target)) return;
+          setModelOpen(false);
+        };
+        try {
+          if (typeof document !== 'undefined' && document !== null && typeof document.addEventListener === 'function') {
+            document.addEventListener('keydown', onKey);
+            document.addEventListener('pointerdown', onDown);
+            return () => {
+              document.removeEventListener('keydown', onKey);
+              document.removeEventListener('pointerdown', onDown);
+            };
+          }
+        } catch {
+          /* no document: nothing to listen on */
+        }
+        return undefined;
+      }, [modelOpen]);
+
+      react.useEffect(() => {
+        if (!picking || lockSnapshot !== null) setModelOpen(false);
+      }, [picking, lockSnapshot]);
 
       const empty = typeof draft !== 'string' || draft.trim() === '';
       const busy = phase === 'busy';
@@ -1027,7 +1080,11 @@ window.__ModuleLoader__.load({
         rememberLock(snapshot);
       };
 
-      const selectionValue = selection === null ? '' : JSON.stringify([selection.provider, selection.model]);
+      const selectedModel = models.find(
+        (item) => selection !== null && item.provider === selection.provider && item.model === selection.model,
+      );
+      const selectionLabel =
+        selectedModel !== undefined ? selectedModel.name : selection === null ? translate('model.empty') : selection.model;
       const modelOptions = [];
       {
         const groups = new Map();
@@ -1036,21 +1093,36 @@ window.__ModuleLoader__.load({
           groups.get(item.provider).items.push(item);
         }
         for (const group of groups.values()) {
-          modelOptions.push(
-            jsx('optgroup', {
-              key: 'provider:' + group.items[0].provider,
-              label: group.name,
-              children: group.items.map((item) =>
-                jsx('option', { key: item.provider + '/' + item.model, value: JSON.stringify([item.provider, item.model]), children: item.name }),
-              ),
-            }),
-          );
+          modelOptions.push(jsx('span', { key: 'provider:' + group.items[0].provider, className: 'dshPo_modelGroup', children: group.name }));
+          for (const item of group.items) {
+            const active = selection !== null && selection.provider === item.provider && selection.model === item.model;
+            modelOptions.push(
+              jsxs('button', {
+                type: 'button',
+                key: item.provider + '/' + item.model,
+                className: 'dshPo_modelOption',
+                'data-model': item.provider + '/' + item.model,
+                'data-active': active ? 'true' : 'false',
+                role: 'option',
+                'aria-selected': active ? 'true' : 'false',
+                title: item.name,
+                onClick: () => {
+                  setModelOpen(false);
+                  void chooseModel(JSON.stringify([item.provider, item.model]));
+                },
+                children: [
+                  jsx('span', { className: 'dshPo_modelOptionName', children: item.name }),
+                  active ? jsx('span', { className: 'dshPo_modelOptionCheck', 'aria-hidden': 'true', children: '✓' }) : null,
+                ],
+              }),
+            );
+          }
         }
         if (modelOptions.length === 0 && selection !== null) {
-          modelOptions.push(jsx('option', { value: JSON.stringify([selection.provider, selection.model]), children: selection.model }));
+          modelOptions.push(jsx('span', { key: 'current', className: 'dshPo_modelOption dshPo_modelOptionStatic', children: selection.model }));
         }
         if (modelOptions.length === 0) {
-          modelOptions.push(jsx('option', { value: '', children: translate('model.empty') }));
+          modelOptions.push(jsx('span', { key: 'empty', className: 'dshPo_modelGroup', children: translate('model.empty') }));
         }
       }
 
@@ -1102,21 +1174,35 @@ window.__ModuleLoader__.load({
                 'data-dsh-prompt-optimizer': 'model-row',
                 children: [
                   jsx('span', { className: 'dshPo_rowLabel', children: translate('model.label') }),
-                  jsx('select', {
-                    className: 'dshPo_select',
-                    'data-dsh-prompt-optimizer': 'model-select',
-                    value: selectionValue,
-                    disabled: lockSnapshot !== null,
-                    'aria-label': translate('model.label'),
-                    title: translate('model.label'),
-                    onChange: (event) => {
-                      const value =
-                        event !== null && typeof event === 'object' && event.target !== null && typeof event.target === 'object'
-                          ? event.target.value
-                          : '';
-                      void chooseModel(value);
-                    },
-                    children: modelOptions,
+                  jsxs('span', {
+                    className: 'dshPo_modelField',
+                    'data-dsh-prompt-optimizer': 'model-field',
+                    ref: modelFieldRef,
+                    children: [
+                      jsxs('button', {
+                        type: 'button',
+                        className: 'dshPo_modelButton',
+                        'data-dsh-prompt-optimizer': 'model-button',
+                        disabled: lockSnapshot !== null,
+                        'aria-haspopup': 'listbox',
+                        'aria-expanded': modelOpen ? 'true' : 'false',
+                        'aria-label': translate('model.label'),
+                        title: translate('model.label'),
+                        onClick: () => {
+                          if (lockSnapshot === null) setModelOpen((open) => !open);
+                        },
+                        children: jsx('span', { className: 'dshPo_modelButtonName', children: selectionLabel }),
+                      }),
+                      modelOpen
+                        ? jsx('span', {
+                            className: 'dshPo_modelList',
+                            role: 'listbox',
+                            'data-dsh-prompt-optimizer': 'model-list',
+                            'aria-label': translate('model.label'),
+                            children: modelOptions,
+                          })
+                        : null,
+                    ],
                   }),
                   efforts.length === 0
                     ? null
