@@ -663,6 +663,12 @@ check(
   'the switch thumb slides when locked',
   /\.dshPo_switch\[data-locked=true\]::after\{transform:translateX\(14px\)/.test(clientExports.CSS),
 );
+check(
+  'the menu rows never scroll',
+  !/\.dshPo_pick\{[^}]*overflow-x:auto/.test(clientExports.CSS) &&
+    !/\.dshPo_row\{[^}]*overflow-x:auto/.test(clientExports.CSS) &&
+    !/\.dshPo_effortChips\{[^}]*overflow-x:auto/.test(clientExports.CSS),
+);
 check('the model row carries the effort chips', /\.dshPo_effortChips\{/.test(clientExports.CSS));
 check(
   'dictionaries name the model row in both locales',
