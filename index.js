@@ -69,6 +69,14 @@ const DEFAULTS = {
   localFallback: true,
   /** Concurrent rewrites allowed before the route answers 429. */
   maxConcurrent: 4,
+  /**
+   * Motion policy for the button chrome.
+   *
+   * `always` (default) keeps every border animation alive even when the OS asks
+   * for reduced motion — the pill is the plugin's whole face. Set `auto` to
+   * honour the system `prefers-reduced-motion` setting again.
+   */
+  motion: 'always',
 };
 
 /** Accepted `style` values, in the order the README documents them. */
@@ -406,6 +414,7 @@ export function normalizeConfig(config) {
     styleHint: typeof raw.styleHint === 'string' ? raw.styleHint : '',
     localFallback: raw.localFallback === undefined ? DEFAULTS.localFallback : raw.localFallback !== false,
     maxConcurrent: Math.floor(pickNumber('maxConcurrent', 1)),
+    motion: raw.motion === 'auto' ? 'auto' : DEFAULTS.motion,
   };
 }
 
@@ -886,6 +895,7 @@ export function apply(ctx, config) {
           localFallback: settings.localFallback,
           maxTokens: settings.maxTokens > 0 ? settings.maxTokens : 'model',
           reasoningEffort: settings.reasoningEffort !== '' ? settings.reasoningEffort : 'selection',
+          motion: settings.motion,
         });
       }
       if (req.method === 'POST' && route === 'probe') {

@@ -130,6 +130,12 @@ check('config keeps an explicit route', cfg.provider === 'a' && cfg.model === 'b
 check('config rejects a half route', H.normalizeConfig({ provider: 'a' }).provider === '');
 check('config keeps numbers and style', cfg.maxTokens === 99 && cfg.style === 'cool');
 check('config defaults are sane', H.normalizeConfig(undefined).localFallback === true && H.normalizeConfig(undefined).style === 'hard');
+check(
+  'motion defaults to always and only auto opts out',
+  H.normalizeConfig(undefined).motion === 'always' &&
+    H.normalizeConfig({ motion: 'auto' }).motion === 'auto' &&
+    H.normalizeConfig({ motion: 'nope' }).motion === 'always',
+);
 
 // --- fake HTTP plumbing ----------------------------------------------------
 function fakeRequest(method, url, body) {
@@ -223,6 +229,15 @@ function mountHost(llm, config, agentDefaultModel) {
   check('health lists the three flavours', Array.isArray(body.styles) && body.styles.join(',') === 'hard,team,cool', JSON.stringify(body.styles));
   check('health lists the task-card shapes', Array.isArray(body.presets) && body.presets.join(',') === 'native,feat,issue,refactor', JSON.stringify(body.presets));
   check('the plugin version is 0.6.1', H.VERSION === '0.6.1', H.VERSION);
+  check('health defaults the motion policy to always', body.motion === 'always', JSON.stringify(body));
+}
+
+// --- GET /health, auto motion ----------------------------------------------
+{
+  const handler = mountHost(fakeLlm([]), { motion: 'auto' });
+  const res = fakeResponse();
+  await handler(fakeRequest('GET', '/dsh-prompt-optimizer/health'), res);
+  check('health reports the auto motion policy when configured', res.json().motion === 'auto', res.body);
 }
 
 // --- GET /models -----------------------------------------------------------
@@ -556,6 +571,17 @@ check(
     /--dsw-alias-bg-layer-1/.test(clientExports.CSS),
 );
 check('client stylesheet keeps forced-colors legible', /forced-colors/.test(clientExports.CSS));
+check(
+  'each phase paints its own ring',
+  /dshPo_btn\[data-phase=busy\]::before/.test(clientExports.CSS) &&
+    /dshPo_btn\[data-phase=done\]::before/.test(clientExports.CSS) &&
+    /dshPo_btn\[data-phase=error\]::before/.test(clientExports.CSS) &&
+    /repeating-linear-gradient\(45deg,#f04438/.test(clientExports.CSS),
+);
+check(
+  'the forge button carries a swept highlight',
+  /\.dshPo_go::after\{/.test(clientExports.CSS) && /@keyframes dshPoGoSweep/.test(clientExports.CSS),
+);
 check('client stylesheet dropped the old bolt mark', !/dshPo_bolt/.test(clientExports.CSS));
 
 const good = clientExports.readResult({ ok: true, text: ' 哥们冲 ', engine: 'local' }, 200);
@@ -710,8 +736,8 @@ check(
     /data-phase=busy\]::before/.test(clientExports.CSS),
 );
 check(
-  'the marquee stops under reduced motion',
-  /prefers-reduced-motion:reduce\)\{[^}]*data-phase=busy\]::before/.test(clientExports.CSS),
+  'the marquee only stops for the auto motion policy',
+  /prefers-reduced-motion:reduce\)\{[^}]*\[data-motion=auto\][^}]*::before/.test(clientExports.CSS),
 );
 check(
   'the model row has button and switch styles',
@@ -729,7 +755,7 @@ check(
 check(
   'the flat menu uses compact chips and controls',
   /\.dshPo_chip\{[^}]*height:26px/.test(clientExports.CSS) &&
-    /\.dshPo_go\{[^}]*height:34px/.test(clientExports.CSS) &&
+    /\.dshPo_go\{[^}]*height:36px/.test(clientExports.CSS) &&
     /\.dshPo_switch\{[^}]*width:30px/.test(clientExports.CSS),
 );
 check(
@@ -757,7 +783,7 @@ check(
 );
 check(
   'the pill carries no dropdown caret',
-  !/\.dshPo_btn::after/.test(clientExports.CSS) && !/25BE/.test(clientExports.CSS),
+  !/\.dshPo_btn::after\{/.test(clientExports.CSS) && !/25BE/.test(clientExports.CSS),
 );
 check(
   'the menu has no close chrome',

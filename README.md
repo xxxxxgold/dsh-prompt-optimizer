@@ -62,10 +62,12 @@ DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出�
 | 状态 | 长什么样 | 说明 |
 |---|---|---|
 | 输入框为空 | 胶囊降透明度 | 仍可点开菜单；点了会提示「输入框是空的，先写点东西哥们」，不发给宿主 |
-| 空闲 | 流动热渐变环（橙→玫红→紫→金）+ 渐变文字 + 静态辉光 | 可点 |
-| 锻造中 | 边框跑马灯（conic 光环 1.05s 一圈）+ 环流速拉快（1.15s）+ 呼吸辉光 + 高光扫过 | 禁用防连点；文字仍是 `♂harden` |
-| 成功 | 青绿渐变环 + 一次弹跳 + 常亮绿辉光 | 结果已写回输入框，右侧小字「已锻造 · 模型出手」 |
-| 失败 | 火红渐变环 + 一次抖动 | 右侧小字写原因 |
+| 空闲 | 四色渐变环（橙→玫红→紫→金），8 秒极慢流动 + 渐变文字 + 静态辉光 | 可点 |
+| 锻造中 | **跑马灯双环**：外环 conic 光环 2px 旋转（1.05s 一圈）+ 内侧静态琥珀细环 + 呼吸辉光 + 高光扫过 | 禁用防连点；文字仍是 `♂harden` |
+| 成功 | **青绿双环**（静态环 + 顶部径向高光）+ 一次弹跳 + 柔和呼吸 | 结果已写回输入框，右侧小字「已锻造 · 模型出手」 |
+| 失败 | **红橙警示斜纹环**（45° 条纹）+ 一次抖动，无光晕 | 右侧小字写原因 |
+
+> 四态边框视觉语言互不相同：空闲是"安静流动"，锻造中是"双环旋转 + 光晕"，成功是"双环 + 顶部高光"，失败是"斜纹 + 抖动"。关掉动画也能一眼分清。
 
 ---
 
@@ -253,6 +255,7 @@ dsh plugin --profile <你的-profile> remove dsh-prompt-optimizer
 | `timeoutMs` | `180000` | 单次调用超时，超时中止 |
 | `maxInputChars` | `20000` | 草稿字符上限，超了 413 |
 | `maxConcurrent` | `4` | 并发上限，超了 429 |
+| `motion` | `always` | 边框动效策略。`always` = 即使系统开了「减少动画」也照跑；`auto` = 尊重系统 `prefers-reduced-motion` |
 | `localFallback` | `true` | 模型失败时是否本地兜底；关掉就把错误抛给界面 |
 | `styleHint` | 空 | 追加口气要求，拼在系统提示词末尾 |
 
@@ -270,7 +273,7 @@ GET  /dsh-prompt-optimizer/model[?provider=&model=]
      → { ok, provider, model, effort, efforts: [{ id, name }] }   # 指定模型时读该模型的挡位
 
 GET  /dsh-prompt-optimizer/health
-     → { ok, plugin, version, style, styles, preset, presets, localFallback }
+     → { ok, plugin, version, style, styles, preset, presets, localFallback, motion }
 
 POST /dsh-prompt-optimizer/optimize
      body: { "text": "<草稿>", "style": "hard|team|cool", "preset": "native|feat|issue|refactor", "provider": "…", "model": "…" }
@@ -357,7 +360,7 @@ scratch/                   本地侦察料，已 gitignore，不入库
 - 模型偶尔仍会朝「细节拉满」多走半步，加一句原文没有的验收动作 —— 生成模型的天性。`sanitizeOutput` 只管输出卫生（代码围栏、`以下是…：` 前言、"如果需要我还可以…"客套），管不了内容。**发布前扫一眼**是最稳的用法。
 - 客户端半改动：刷新页面。宿主半改动：插件管理器里关掉再打开。
 - 按钮底色取 `--dsw-alias-bg-layer-1`（回退 `--dsw-alias-bg-base` → `#1c1d21`）：真 GUI 里跟随主题明暗；`tools/preview.html` 没有 DSH 主题令牌，所以截图吃的是深色回退值。
-- `prefers-reduced-motion` 停全部动画；`forced-colors` 退化为系统色实心按钮。
+- 动效策略由 `motion` 决定：默认 `always`，即使系统开了「减少动画」四态边框照跑（按钮的环就是它的脸）；填 `auto` 才回到尊重 `prefers-reduced-motion`。`forced-colors` 下仍退化为系统色实心按钮。
 
 ---
 

@@ -424,25 +424,38 @@ window.__ModuleLoader__.load({
       // a masked conic gradient, so only the 1.5px edge paints; the angle is a
       // registered custom property, which keeps the animation compositor-cheap.
       '@property --dshPoAngle{syntax:"<angle>";initial-value:0deg;inherits:false}',
-      '.dshPo_btn[data-phase=busy]::before{content:"";position:absolute;inset:-1.5px;border-radius:inherit;padding:1.5px;',
+      '.dshPo_btn[data-phase=busy]::before{content:"";position:absolute;inset:-2px;border-radius:inherit;padding:2px;',
       'pointer-events:none;z-index:0;',
-      'background:conic-gradient(from var(--dshPoAngle),transparent 0deg 36%,#ffb020 45%,#ff3b30 51%,transparent 60%,',
+      'background:conic-gradient(from var(--dshPoAngle),transparent 0deg 34%,#ffb020 43%,#ff3b30 50%,transparent 59%,',
       'transparent 72%,#ffd60a 81%,#ff8a00 88%,transparent 96%);',
       '-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;',
       'mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;',
       'animation:dshPoOrbit 1.05s linear infinite}',
-      // done: teal-green ring, one happy pop, lasting glow.
+      // Inner amber ring: static, so a still frame still reads as "working".
+      '.dshPo_btn[data-phase=busy]::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;',
+      'box-shadow:inset 0 0 0 1px rgba(255,176,32,.55),inset 0 0 10px rgba(255,120,0,.18)}',
+      // done: teal-green double ring plus a top highlight — bright, not spinning.
       '.dshPo_btn[data-phase=done]{opacity:1;--dshPo-ring:linear-gradient(115deg,#12b76a,#7ee2b8 45%,#0fbf7f);',
       '--dshPo-tint:linear-gradient(135deg,rgba(18,183,106,.22),rgba(126,226,184,.15));',
-      'animation:dshPoFlow 2.6s linear infinite,dshPoPop .5s cubic-bezier(.2,1.5,.4,1) 1;',
+      'animation:dshPoPop .5s cubic-bezier(.2,1.5,.4,1) 1,dshPoBreathe 2.8s ease-in-out infinite;',
       'box-shadow:0 0 0 1px rgba(18,183,106,.40),0 3px 14px rgba(18,183,106,.34),0 0 22px rgba(18,183,106,.24)}',
       '.dshPo_btn[data-phase=done] .dshPo_label{background-image:linear-gradient(100deg,#0fbf7f,#12b76a 48%,#7ee2b8)}',
-      // error: ember ring, one shake, no endless blinking.
+      '.dshPo_btn[data-phase=done]::before{content:"";position:absolute;inset:-2px;border-radius:inherit;padding:2px;pointer-events:none;z-index:0;',
+      'background:linear-gradient(135deg,#12b76a,#7ee2b8 48%,#0fbf7f);',
+      '-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;',
+      'mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}',
+      '.dshPo_btn[data-phase=done]::after{content:"";position:absolute;inset:-2px;border-radius:inherit;pointer-events:none;z-index:0;',
+      'background:radial-gradient(62% 62% at 50% 0%,rgba(190,255,225,.55),transparent 70%)}',
+      // error: hazard stripes — the one state with a texture, so it never reads as busy.
       '.dshPo_btn[data-phase=error]{opacity:1;--dshPo-ring:linear-gradient(115deg,#f04438,#ff7a59 45%,#ffb020);',
       '--dshPo-tint:linear-gradient(135deg,rgba(240,68,56,.24),rgba(255,122,89,.15));',
       'animation:dshPoShake .42s ease-in-out 1;',
       'box-shadow:0 0 0 1px rgba(240,68,56,.44),0 3px 14px rgba(240,68,56,.34),0 0 22px rgba(240,68,56,.24)}',
       '.dshPo_btn[data-phase=error] .dshPo_label{background-image:linear-gradient(100deg,#f04438,#ff7a59 55%,#ffb020)}',
+      '.dshPo_btn[data-phase=error]::before{content:"";position:absolute;inset:-2px;border-radius:inherit;padding:2px;pointer-events:none;z-index:0;',
+      'background:repeating-linear-gradient(45deg,#f04438 0 6px,#ff7a59 6px 12px);',
+      '-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;',
+      'mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}',
       // Motion.
       '@keyframes dshPoFlow{from{background-position:0% 50%,0% 50%,0% 50%}to{background-position:0% 50%,0% 50%,100% 50%}}',
       '@keyframes dshPoTextFlow{from{background-position:0% 50%}to{background-position:100% 50%}}',
@@ -451,6 +464,8 @@ window.__ModuleLoader__.load({
       '@keyframes dshPoPulse{0%,100%{box-shadow:0 0 0 1px rgba(255,140,0,.40),0 0 12px rgba(255,90,0,.28)}',
       '50%{box-shadow:0 0 0 1px rgba(255,196,0,.55),0 0 26px rgba(255,120,0,.50)}}',
       '@keyframes dshPoPop{0%{transform:scale(.90)}55%{transform:scale(1.07)}100%{transform:scale(1)}}',
+      '@keyframes dshPoBreathe{0%,100%{filter:brightness(1)}50%{filter:brightness(1.10)}}',
+      '@keyframes dshPoGoSweep{from{left:-70%}to{left:130%}}',
       '@keyframes dshPoShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}',
       '60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}',
       // Flavour picker: opens upward from the pill, three chips in ONE row.
@@ -503,11 +518,23 @@ window.__ModuleLoader__.load({
       '.dshPo_switch[data-locked=true]::after{transform:translateX(14px)}',
       '.dshPo_switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
       '.dshPo_switch:disabled{opacity:.5;cursor:not-allowed}',
-      '.dshPo_go{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:34px;padding:0 12px;',
-      'border-radius:8px;border:0;cursor:pointer;font:inherit;font-size:13px;font-weight:700;',
-      'color:#fff;background:linear-gradient(90deg,#ff6a00,#ff2d55);box-shadow:none}',
-      '.dshPo_go:hover:not(:disabled){filter:brightness(1.04)}',
-      '.dshPo_go:disabled{opacity:.5;cursor:not-allowed}',
+      // The forge button: layered gradient, inner highlight, outer ember glow,
+      // a lift on hover, a press on click and a swept highlight on top.
+      '.dshPo_go{position:relative;overflow:hidden;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:36px;padding:0 14px;',
+      'border-radius:9px;border:1px solid rgba(255,150,60,.55);cursor:pointer;font:inherit;font-size:13px;font-weight:800;letter-spacing:.3px;',
+      'color:#fff;text-shadow:0 1px 2px rgba(80,10,0,.35);',
+      'background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 46%),linear-gradient(100deg,#ff3b30 0%,#ff6a00 46%,#ffb020 100%);',
+      'box-shadow:inset 0 1px 0 rgba(255,255,255,.32),inset 0 -1px 0 rgba(120,20,0,.28),0 4px 16px rgba(255,80,0,.34),0 0 0 1px rgba(255,120,0,.42);',
+      'transition:transform .14s ease,box-shadow .18s ease,filter .18s ease}',
+      '.dshPo_go::after{content:"";position:absolute;top:-30%;bottom:-30%;left:-70%;width:42%;transform:skewX(-20deg);pointer-events:none;',
+      'background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);opacity:0}',
+      '.dshPo_go:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.06) saturate(1.05);',
+      'box-shadow:inset 0 1px 0 rgba(255,255,255,.36),0 6px 20px rgba(255,90,0,.44),0 0 0 1px rgba(255,150,40,.6),0 0 26px rgba(255,110,0,.35)}',
+      '.dshPo_go:hover:not(:disabled)::after{opacity:1;animation:dshPoGoSweep 1.1s ease-out}',
+      '.dshPo_go:active:not(:disabled){transform:translateY(1px) scale(.995);filter:brightness(.97);',
+      'box-shadow:inset 0 2px 6px rgba(80,10,0,.45),0 1px 4px rgba(255,80,0,.25)}',
+      '.dshPo_go:focus-visible{outline:2px solid rgba(255,176,32,.9);outline-offset:2px}',
+      '.dshPo_go:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}',
       '.dshPo_goHint{font-weight:400;opacity:.8;font-size:11px}',
       // The transient one-line result note beside the pill.
       '.dshPo_note{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
@@ -516,9 +543,12 @@ window.__ModuleLoader__.load({
       '.dshPo_visuallyHidden{clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}',
       // Accessibility gates: nothing moves for reduced motion, and forced-colors
       // gets a plain system pill instead of an unreadable gradient.
-      '@media (prefers-reduced-motion:reduce){.dshPo_btn,.dshPo_btn .dshPo_label,.dshPo_shine::after,.dshPo_btn[data-phase=busy]::before',
+      // Motion gate: only `data-motion="auto"` honours the OS setting. The
+      // default (`always`) keeps every border animation running, because the
+      // animated ring IS the plugin's face.
+      '@media (prefers-reduced-motion:reduce){[data-motion=auto] .dshPo_btn,[data-motion=auto] .dshPo_btn[data-phase]::before,[data-motion=auto] .dshPo_btn[data-phase]::after,[data-motion=auto] .dshPo_btn .dshPo_label,[data-motion=auto] .dshPo_shine::after,[data-motion=auto] .dshPo_go,[data-motion=auto] .dshPo_go::after',
       '{animation:none!important;transition:none!important}',
-      '.dshPo_btn:hover:not(:disabled){transform:none}.dshPo_shine::after{opacity:0!important}}',
+      '[data-motion=auto] .dshPo_btn:hover:not(:disabled){transform:none}[data-motion=auto] .dshPo_shine::after{opacity:0!important}}',
       '@media (forced-colors:active){.dshPo_btn{background:ButtonFace;border-color:ButtonBorder;color:ButtonText;',
       'box-shadow:none;animation:none}',
       '.dshPo_btn .dshPo_label{background-image:none;-webkit-text-fill-color:ButtonText;color:ButtonText}',
@@ -733,6 +763,29 @@ window.__ModuleLoader__.load({
       // The custom model dropdown anchors to its own field, so a click elsewhere
       // in the menu can close it without closing the whole picker.
       const modelFieldRef = react.useRef(null);
+
+      // The host owns the motion policy: `always` (default) keeps the rings
+      // running even when the OS asks for reduced motion, `auto` opts back in.
+      react.useEffect(() => {
+        let alive = true;
+        try {
+          fetch('/dsh-prompt-optimizer/health', { headers: { accept: 'application/json' } })
+            .then((response) => (response !== null && response.ok ? response.json() : null))
+            .then((body) => {
+              if (!alive || body === null || typeof body !== 'object' || body.motion !== 'auto') return;
+              const root = rootRef.current;
+              if (root !== null && root !== undefined && root.dataset !== undefined) root.dataset.motion = 'auto';
+            })
+            .catch(() => {
+              /* offline: keep the default `always` */
+            });
+        } catch {
+          /* no fetch in this host: keep the default `always` */
+        }
+        return () => {
+          alive = false;
+        };
+      }, []);
 
       // Abandon one in-flight rewrite when the entry unmounts, and clear the
       // transient note timer so a settled state cannot be overwritten later.
