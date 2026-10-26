@@ -380,7 +380,10 @@ window.__ModuleLoader__.load({
       '--dshPo-a:#ff6a00;--dshPo-b:#ff2d55;--dshPo-c:#a855f7;--dshPo-d:#ffc400;',
       '--dshPo-surface:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-base,#1c1d21));',
       '--dshPo-tint:linear-gradient(135deg,rgba(255,106,0,.22),rgba(255,45,85,.15) 48%,rgba(168,85,247,.20));',
-      '--dshPo-ring:linear-gradient(115deg,#ff6a00,#ff2d55 30%,#a855f7 62%,#ffc400 84%,#ff6a00);',
+      // One hue sweep, no hairpin: orange → rose → magenta → violet → rose →
+      // amber → gold → orange. Every hop stays under ~60°, so the ring reads as a
+      // smooth gradient instead of four colour blocks with dirty seams.
+      '--dshPo-ring:linear-gradient(115deg,#ff6a00 0%,#ff2d55 22%,#d94f9e 34%,#a855f7 48%,#c94ad0 58%,#e0459f 68%,#ff7a2f 84%,#ffc400 92%,#ff6a00 100%);',
       'position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;',
       'height:calc(24px + var(--dsh-content-font-delta,0px));padding:0 11px;border-radius:999px;',
       'border:1px solid transparent;',
@@ -405,7 +408,7 @@ window.__ModuleLoader__.load({
       // The label is the whole mark; z-index keeps it above the gloss sweep.
       '.dshPo_label{position:relative;z-index:1;display:inline-block}',
       '@supports ((-webkit-background-clip:text) or (background-clip:text)){',
-      '.dshPo_btn .dshPo_label{background-image:linear-gradient(100deg,#ff6a00,#ff2d55 34%,#a855f7 68%,#ffc400);',
+      '.dshPo_btn .dshPo_label{background-image:linear-gradient(100deg,#ff6a00,#ff2d55 24%,#d94f9e 36%,#a855f7 50%,#c94ad0 60%,#e0459f 70%,#ff7a2f 86%,#ffc400 96%);',
       'background-size:220% 100%;background-position:0% 50%;-webkit-background-clip:text;background-clip:text;',
       '-webkit-text-fill-color:transparent;color:transparent;animation:dshPoTextFlow 4.2s linear infinite}}',
       // Gloss sweep: a skewed highlight, always on hover, relentless while busy.
