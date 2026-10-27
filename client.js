@@ -69,8 +69,8 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------------------
     // Flavour choice — lives on the button, remembered between clicks
     // ---------------------------------------------------------------------
-    /** The three flavours the host understands, in menu order. */
-    const STYLE_IDS = ['hard', 'team', 'cool'];
+    /** The flavours the host understands, in menu order. `native` adds no voice. */
+    const STYLE_IDS = ['native', 'hard', 'team', 'cool'];
 
     /** Where the last used flavour is remembered. */
     const STYLE_STORAGE_KEY = 'dsh-prompt-optimizer:style';
@@ -302,9 +302,11 @@ window.__ModuleLoader__.load({
       'model.unlockHint': '解锁后可以重新选择模型与思考强度',
       'model.current': '当前模型',
       'model.empty': '没有可用模型',
+      'style.native': '原生',
       'style.hard': '硬汉',
       'style.team': '肌肉集团',
       'style.cool': '雷霆炫酷',
+      'style.native.hint': '原生：不换口气，只把要求整理成清晰的条目',
       'style.hard.hint': '硬汉直给：短句命令式，强度词管够',
       'style.team.hint': '肌肉集团：拆成能并行的块，各干各的再拼装',
       'style.cool.hint': '雷霆炫酷：拉爆、榨干、细节拉满',
@@ -313,6 +315,8 @@ window.__ModuleLoader__.load({
       'preset.issue': '缺陷',
       'preset.refactor': '重构',
       'preset.native.hint': '原生：一句话硬邦邦提示词，选完直接发',
+      'note.copyHint': '点击复制这条提示',
+      'note.copied': '已复制',
       'preset.feat.hint': '需求：Trellis feat 任务书，prd→design→impl→review→check',
       'preset.issue.hint': '缺陷：Trellis issue 报告，report→analyze→fix→fix-note',
       'preset.refactor.hint': '重构：Trellis refactor 扫描，scan→design→apply→done',
@@ -346,9 +350,11 @@ window.__ModuleLoader__.load({
       'model.unlockHint': 'Unlock to pick a different model or thinking effort',
       'model.current': 'current model',
       'model.empty': 'no models available',
+      'style.native': 'native',
       'style.hard': 'hard',
       'style.team': 'team',
       'style.cool': 'cool',
+      'style.native.hint': 'Native: no voice, just tidy the requirements into clear items',
       'style.hard.hint': 'Hard-boiled: clipped commands, plenty of force',
       'style.team.hint': 'Muscle crew: split into parallel chunks, then bolt together',
       'style.cool.hint': 'Thunder-cool: crank it up, wring it out, every detail',
@@ -357,6 +363,8 @@ window.__ModuleLoader__.load({
       'preset.issue': 'issue',
       'preset.refactor': 'refactor',
       'preset.native.hint': 'Plain: one hardened paragraph, ready to send',
+      'note.copyHint': 'Click to copy this message',
+      'note.copied': 'copied',
       'preset.feat.hint': 'Feat: Trellis feat task card, prd→design→impl→review→check',
       'preset.issue.hint': 'Issue: Trellis issue report, report→analyze→fix→fix-note',
       'preset.refactor.hint': 'Refactor: Trellis refactor scan, scan→design→apply→done',
@@ -483,6 +491,9 @@ window.__ModuleLoader__.load({
       '.dshPo_chip:hover{background:rgba(255,106,0,.10);border-color:rgba(255,106,0,.24)}',
       '.dshPo_chip:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#ff6a00);outline-offset:1px}',
       '.dshPo_chip[data-active=true]{background:rgba(255,106,0,.16);border-color:rgba(255,106,0,.52)}',
+      // The mirror `native` chips grey out while the other side owns that word.
+      '.dshPo_chip[data-conflict=true]{opacity:.40;border-style:dashed;border-color:rgba(255,255,255,.18)}',
+      '.dshPo_chip[data-conflict=true]:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.24)}',
       '.dshPo_chipName{font-size:12px;font-weight:600;letter-spacing:.2px}',
       '.dshPo_row{display:flex;flex-direction:row;flex-wrap:nowrap;gap:4px;align-items:center}',
       '.dshPo_sep{flex:0 0 auto;width:1px;align-self:stretch;margin:2px 2px;border-radius:1px;background:rgba(255,255,255,.10)}',
@@ -540,9 +551,16 @@ window.__ModuleLoader__.load({
       '.dshPo_go:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}',
       '.dshPo_goHint{font-weight:400;opacity:.8;font-size:11px}',
       // The transient one-line result note beside the pill.
+      // The note is the only place a failure is explained: give it a card,
+      // real contrast, room to wrap, and a click-to-copy affordance.
       '.dshPo_note{font-size:var(--dsh-content-font-size-caption,12px);color:var(--dsw-alias-label-tertiary,inherit);',
-      'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.dshPo_note[data-phase=error]{color:var(--dsw-alias-state-error-primary,#f04438)}',
+      'max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;padding:2px 6px;border-radius:6px;',
+      'transition:background .15s ease,color .15s ease}',
+      '.dshPo_note:hover{background:rgba(255,255,255,.07)}',
+      '.dshPo_note[data-phase=error]{color:#ffd9d4;background:rgba(240,68,56,.16);border:1px solid rgba(240,68,56,.42);',
+      'white-space:normal;max-width:380px;line-height:1.45;padding:5px 9px;font-weight:500}',
+      '.dshPo_note[data-phase=error]:hover{background:rgba(240,68,56,.26)}',
+      '.dshPo_note[data-copied=true]{color:#9be8b8;background:rgba(18,183,106,.16);border-color:rgba(18,183,106,.42)}',
       '.dshPo_visuallyHidden{clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}',
       // Accessibility gates: nothing moves for reduced motion, and forced-colors
       // gets a plain system pill instead of an unreadable gradient.
@@ -730,7 +748,7 @@ window.__ModuleLoader__.load({
     }
 
     /** How long a transient result note stays on screen. */
-    const NOTE_MS = { done: 2600, error: 6000 };
+    const NOTE_MS = { done: 2600, error: 15000 };
 
     // ---------------------------------------------------------------------
     // The button
@@ -759,6 +777,7 @@ window.__ModuleLoader__.load({
       const [selection, setSelection] = react.useState(() => readStoredModel());
       const [lockSnapshot, setLockSnapshot] = react.useState(() => readStoredLock());
       const [modelOpen, setModelOpen] = react.useState(false);
+      const [copied, setCopied] = react.useState(false);
       const abortRef = react.useRef(null);
       // The pill and its menu share one positioned root; the menu is a sibling
       // so the pill stays mounted (and keeps focus) while the menu is open.
@@ -1089,11 +1108,42 @@ window.__ModuleLoader__.load({
       const choose = (flavour) => {
         setStyle(flavour);
         rememberStyle(flavour);
+        // The two `native`s are mirrors: picking the voice-free one evicts the
+        // shape named `native`, so the same word is never lit twice.
+        if (flavour === 'native' && preset === 'native') {
+          setPreset('feat');
+          rememberPreset('feat');
+        }
       };
 
       const choosePreset = (shape) => {
         setPreset(shape);
         rememberPreset(shape);
+        if (shape === 'native' && style === 'native') {
+          setStyle('hard');
+          rememberStyle('hard');
+        }
+      };
+
+      /** Copy the current note so a failure message can be pasted elsewhere. */
+      const copyNote = () => {
+        if (note === '') return;
+        try {
+          const nav = typeof navigator !== 'undefined' ? navigator : null;
+          const clip = nav !== null && nav.clipboard !== undefined ? nav.clipboard : null;
+          if (clip === null || typeof clip.writeText !== 'function') return;
+          clip
+            .writeText(note)
+            .then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1800);
+            })
+            .catch(() => {
+              /* clipboard blocked: the text is still selectable */
+            });
+        } catch {
+          /* no clipboard in this host */
+        }
       };
 
       const chooseModel = async (value) => {
@@ -1202,6 +1252,9 @@ window.__ModuleLoader__.load({
 
       const chip = (group, id) => {
         const active = group === 'style' ? style === id : preset === id;
+        // The two `native`s are the same idea from two sides: picking one must
+        // hand the other back to a real choice, so they never sit on together.
+        const conflict = id === 'native' && (group === 'style' ? preset === 'native' : style === 'native');
         return jsxs('button', {
           type: 'button',
           key: group + ':' + id,
@@ -1211,6 +1264,7 @@ window.__ModuleLoader__.load({
           'data-style': group === 'style' ? id : undefined,
           'data-preset': group === 'preset' ? id : undefined,
           'data-active': active ? 'true' : 'false',
+          'data-conflict': conflict ? 'true' : 'false',
           role: 'menuitemradio',
           'aria-checked': active ? 'true' : 'false',
           title: translate(group + '.' + id + '.hint'),
@@ -1341,8 +1395,10 @@ window.__ModuleLoader__.load({
             : jsx('span', {
                 className: 'dshPo_note',
                 'data-phase': phase,
-                title: note,
-                children: note,
+                'data-copied': copied ? 'true' : 'false',
+                title: copied ? translate('note.copied') : translate('note.copyHint'),
+                onClick: copyNote,
+                children: copied ? translate('note.copied') : note,
               }),
         ],
       });

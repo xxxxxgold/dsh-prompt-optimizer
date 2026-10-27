@@ -137,6 +137,16 @@ check(
     H.normalizeConfig({ motion: 'nope' }).motion === 'always',
 );
 
+// --- the voice-free flavour ------------------------------------------------
+{
+  const plain = H.buildSystemPrompt('native', '', 'native');
+  check('the native voice drops the muscle-man instructions', !/风格：怎么才算硬/.test(plain) && !/强度词管够/.test(plain) && !/开口就喊人/.test(plain));
+  check('the native voice keeps the iron rules', /信息不许丢/.test(plain) && /不许新增原文没有的具体事实/.test(plain));
+  check('the native voice still lists one item per line', /单独占一行/.test(plain));
+  check('the native voice composes with a task card', /workType: feat/.test(H.buildSystemPrompt('native', '', 'feat')));
+  check('a voiced flavour keeps the style samples', /老哥们，是这样的/.test(H.buildSystemPrompt('hard', '', '')));
+}
+
 // --- fake HTTP plumbing ----------------------------------------------------
 function fakeRequest(method, url, body) {
   const chunks = body === undefined ? [] : [Buffer.from(body, 'utf8')];
@@ -226,7 +236,7 @@ function mountHost(llm, config, agentDefaultModel) {
   const body = res.json();
   check('health answers ok', res.statusCode === 200 && body.ok === true, JSON.stringify(body));
   check('health reports the version', body.version === H.VERSION, JSON.stringify(body));
-  check('health lists the three flavours', Array.isArray(body.styles) && body.styles.join(',') === 'hard,team,cool', JSON.stringify(body.styles));
+  check('health lists the four flavours', Array.isArray(body.styles) && body.styles.join(',') === 'native,hard,team,cool', JSON.stringify(body.styles));
   check('health lists the task-card shapes', Array.isArray(body.presets) && body.presets.join(',') === 'native,feat,issue,refactor', JSON.stringify(body.presets));
   check('the plugin version is 0.6.1', H.VERSION === '0.6.1', H.VERSION);
   check('health defaults the motion policy to always', body.motion === 'always', JSON.stringify(body));
@@ -618,8 +628,8 @@ check('entry mounts the button once the props exist', withProps !== null && type
 
 // --- the flavour picker ----------------------------------------------------
 check(
-  'client knows exactly the three flavours',
-  Array.isArray(clientExports.STYLE_IDS) && clientExports.STYLE_IDS.join(',') === 'hard,team,cool',
+  'client knows exactly the four flavours',
+  Array.isArray(clientExports.STYLE_IDS) && clientExports.STYLE_IDS.join(',') === 'native,hard,team,cool',
   JSON.stringify(clientExports.STYLE_IDS),
 );
 check(
@@ -928,13 +938,13 @@ check(
     JSON.stringify({ className: pill.props.className, open: pill.props['data-open'] }),
   );
   check(
-    'clicking the pill reveals three flavour chips',
-    picker.props['data-dsh-prompt-optimizer'] === 'picker' && chips.length === 3,
+    'clicking the pill reveals four flavour chips',
+    picker.props['data-dsh-prompt-optimizer'] === 'picker' && chips.length === 4,
     String(chips.length),
   );
   check(
     'the chips are hard, team, cool in that order',
-    chips.map((chip) => chip.props['data-style']).join(',') === 'hard,team,cool',
+    chips.map((chip) => chip.props['data-style']).join(',') === 'native,hard,team,cool',
     chips.map((chip) => chip.props['data-style']).join(','),
   );
   check(
@@ -948,7 +958,7 @@ check(
   );
   check(
     'the menu is two groups in one row plus a confirm button',
-    row.props.children.length === 8 && forgeButton.props.className === 'dshPo_go',
+    row.props.children.length === 9 && forgeButton.props.className === 'dshPo_go',
     String(row.props.children.length) + '/' + forgeButton.props.className,
   );
   const presetChips = row.props.children.filter((child) => child.props['data-preset'] !== undefined);
@@ -969,7 +979,7 @@ check(
   );
   check(
     'a divider separates the two groups',
-    row.props.children[3].props.className === 'dshPo_sep' && row.props.children[3].props['aria-hidden'] === 'true',
+    row.props.children[4].props.className === 'dshPo_sep' && row.props.children[4].props['aria-hidden'] === 'true',
   );
   check(
     'the shape chips are wired to their own handler',
@@ -1218,11 +1228,26 @@ check(
     (child) => child !== null && child !== undefined && child.type === 'button' && child.props['data-style'] !== undefined,
   );
   calls.length = 0;
+  check(
+    'the mirror native chip greys out while the shape owns the word',
+    chips[0].props['data-conflict'] === 'true' && chips[1].props['data-conflict'] === 'false',
+    JSON.stringify(chips.map((chip) => chip.props['data-style'] + ':' + String(chip.props['data-conflict']))),
+  );
+  calls.length = 0;
   chips[0].props.onClick();
   check(
-    'picking a flavour only remembers it, the menu stays open',
-    calls.some((call) => call.index === 3 && call.next === 'hard') &&
+    'picking the native voice evicts the native shape and stays open',
+    calls.some((call) => call.index === 3 && call.next === 'native') &&
+      calls.some((call) => call.index === 4 && call.next === 'feat') &&
       !calls.some((call) => call.index === 2),
+    JSON.stringify(calls.map((call) => call.index + ':' + String(call.next))),
+  );
+  calls.length = 0;
+  chips[1].props.onClick();
+  check(
+    'picking a voiced flavour leaves the shape alone',
+    calls.some((call) => call.index === 3 && call.next === 'hard') &&
+      !calls.some((call) => call.index === 4),
     JSON.stringify(calls.map((call) => call.index + ':' + String(call.next))),
   );
   const forgeOnEmpty = (openMenu.props.children || []).find(

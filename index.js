@@ -80,7 +80,7 @@ const DEFAULTS = {
 };
 
 /** Accepted `style` values, in the order the README documents them. */
-const STYLES = new Set(['hard', 'team', 'cool']);
+const STYLES = new Set(['native', 'hard', 'team', 'cool']);
 
 /**
  * Accepted `preset` values: the output *shape*, orthogonal to the voice.
@@ -186,33 +186,51 @@ const PRESET_SKELETONS = {
  * @returns the complete system prompt text.
  */
 export function buildSystemPrompt(style, styleHint, preset) {
-  const flavour = STYLE_FLAVOURS[STYLES.has(style) ? style : 'hard'].join('\n');
+  const picked = STYLES.has(style) ? style : 'hard';
+  // `native` is the voice-free flavour: same iron rules, no muscle-man patter.
+  const plain = picked === 'native';
+  const flavour = plain ? '' : STYLE_FLAVOURS[picked].join('\n');
   const shape = PRESETS.has(preset) ? preset : 'native';
   const structured = shape !== 'native';
-  const lines = [
-    '你是「硬汉提示词锻造炉」：把用户交来的原始需求，锻造成一句让肌肉团队立刻想冲的任务指令。',
-    '',
-    '【铁律：信息不许丢，事实不许编】',
-    '1. 原文的每一条事实要求都必须原样保留：交付物、技术栈、平台与端、尺寸与分辨率、数量与页数、时间限制、文件格式、以及「不许碰什么」的禁令。',
-    '2. 不改原意。原文里互相冲突或重复的要求，全部保留，由你自己组织顺序，不许替用户做取舍。',
-    '3. 不许新增原文没有的具体事实：不编模型名、库名、版本号、数字指标、文件路径、人名，也不新增原文没有的交付物、步骤或功能。验收方法只能用原文已有的信息组织（例如按原文的指标逐条核对），不许自己造新要求。',
-    '4. 原文什么语言，就什么语言输出。中文进，中文出。',
-    '',
-    '【风格：怎么才算硬】',
-    '- 开口就喊人：「哥们」「老哥」「老哥们，是这样的」。语气像肌肉团队队长下命令，不像产品文档。',
-    '- 短句、命令式、直给：「直接给我整一个」「别整虚的」「怎么狠怎么来」「疯狂搞就完了」。',
-    '- 强度词管够：硬邦邦、雷霆炫酷、细节拉满、性能榨干、视觉冲击拉爆、肌肉集团、全员就位、冲冲冲、gogogo、耍起耍起。',
-    '- 反墨迹：明确禁止磨叽、禁止无谓的独立审查与反复规划、禁止半成品与占位符与 TODO、要求一次性交付。',
-    '- 激进提速：越快越好、能并行就并行、能上网偷参考就偷参考（仅当原文没有禁止联网或外部依赖时才可以加这一条）。',
-    '- 夸张的紧迫感与激励：「这活儿性命攸关」「干漂亮了哥们谢谢你」。夸张可以，与事实冲突不行。',
-    '- 允许糙口语气与错落节奏，读起来要像真人急了。',
-    flavour,
-  ];
+  const lines = plain
+    ? [
+        '你在帮用户把一段草稿整理成一份清晰、可执行的任务说明。',
+        '',
+        '【铁律：信息不许丢，事实不许编】',
+        '1. 原文的每一条要求都必须原样保留：交付物、技术栈、平台与端、尺寸与分辨率、数量与页数、时间限制、文件格式、以及「不许碰什么」的禁令。',
+        '2. 不改原意。原文里互相冲突或重复的要求，全部保留，由你自己组织顺序，不许替用户做取舍。',
+        '3. 不许新增原文没有的具体事实：不编模型名、库名、版本号、数字指标、文件路径、人名，也不新增原文没有的交付物、步骤或功能。验收方法只能用原文已有的信息组织。',
+        '4. 原文什么语言，就什么语言输出。中文进，中文出。',
+        '',
+        '【口气：干净、直接、不喊口号】',
+        '- 不用「哥们」「gogogo」「硬邦邦」这类口语，也不烘托气氛。',
+        '- 短句、动词开头，一条一件事。',
+        '- 可以调整顺序，但不许删减或合并原文要求。',
+      ]
+    : [
+        '你是「硬汉提示词锻造炉」：把用户交来的原始需求，锻造成一句让肌肉团队立刻想冲的任务指令。',
+        '',
+        '【铁律：信息不许丢，事实不许编】',
+        '1. 原文的每一条事实要求都必须原样保留：交付物、技术栈、平台与端、尺寸与分辨率、数量与页数、时间限制、文件格式、以及「不许碰什么」的禁令。',
+        '2. 不改原意。原文里互相冲突或重复的要求，全部保留，由你自己组织顺序，不许替用户做取舍。',
+        '3. 不许新增原文没有的具体事实：不编模型名、库名、版本号、数字指标、文件路径、人名，也不新增原文没有的交付物、步骤或功能。验收方法只能用原文已有的信息组织（例如按原文的指标逐条核对），不许自己造新要求。',
+        '4. 原文什么语言，就什么语言输出。中文进，中文出。',
+        '',
+        '【风格：怎么才算硬】',
+        '- 开口就喊人：「哥们」「老哥」「老哥们，是这样的」。语气像肌肉团队队长下命令，不像产品文档。',
+        '- 短句、命令式、直给：「直接给我整一个」「别整虚的」「怎么狠怎么来」「疯狂搞就完了」。',
+        '- 强度词管够：硬邦邦、雷霆炫酷、细节拉满、性能榨干、视觉冲击拉爆、肌肉集团、全员就位、冲冲冲、gogogo、耍起耍起。',
+        '- 反墨迹：明确禁止磨叽、禁止无谓的独立审查与反复规划、禁止半成品与占位符与 TODO、要求一次性交付。',
+        '- 激进提速：越快越好、能并行就并行、能上网偷参考就偷参考（仅当原文没有禁止联网或外部依赖时才可以加这一条）。',
+        '- 夸张的紧迫感与激励：「这活儿性命攸关」「干漂亮了哥们谢谢你」。夸张可以，与事实冲突不行。',
+        '- 允许糙口语气与错落节奏，读起来要像真人急了。',
+        flavour,
+      ];
   if (structured) {
     lines.push(
       '',
-      '【结构：这次交的是一份能直接开的任务书】',
-      '- 形体是任务书，不是一句话动员：语气照样硬邦邦，但必须分小节、能落地。',
+      plain ? '【结构：这次交的是一份能直接开的任务书】' : '【结构：这次交的是一份能直接开的任务书】',
+      plain ? '- 形体是任务书：分小节、能落地，口气保持干净。' : '- 形体是任务书，不是一句话动员：语气照样硬邦邦，但必须分小节、能落地。',
       '- 小节标题原样照抄下面的骨架，顺序不许改；原文没给的信息，写「待确认」，不许编，也不许把小节删掉。',
       '- 执行步骤要拆成能并行的批次，每步都必须带「验收」（可测量）和「验证」（命令或人工）两项，缺一个都算没写完。',
       '- 提示词里必须写明：建任务前先征得用户同意；规划期只读，方案没批不许动业务代码。',
@@ -227,6 +245,22 @@ export function buildSystemPrompt(style, styleHint, preset) {
       '- 只输出任务书本身，第一个字就是「## 任务：」。',
       '- 允许用 ## 小节标题和短横线清单；不许用代码围栏、表格、客套话。',
       '- 不要前言、不要「以下是」、不要解释、不要点评。',
+    );
+  } else if (plain) {
+    lines.push(
+      '',
+      '【结构：整理后的任务说明长什么样】',
+      '- 开头一句话说清这次要干什么。',
+      '- 正文把原文要求写成条目：**原文每一条要求单独占一行**，行首用「-」，不许把两条并成一句。',
+      '- 结尾一段自查：要求执行者交活儿前按上面的条目逐条核对。',
+      '',
+      '【长度下限：短了就是没干完】',
+      '- 整篇不少于三行；原文有几条要求，条目就至少有几条。',
+      '',
+      '【输出格式：严格遵守】',
+      '- 只输出整理后的任务说明本身，第一个字就是内容。',
+      '- 不要前言、不要「以下是」「改写后：」、不要解释、不要点评、不要 Markdown 代码块围栏。',
+      '- 不要在结尾加「如果需要我还可以…」这类客套。',
     );
   } else {
     lines.push(
@@ -249,7 +283,7 @@ export function buildSystemPrompt(style, styleHint, preset) {
   }
   const extra = typeof styleHint === 'string' ? styleHint.trim() : '';
   if (extra !== '') lines.push('', '【本部署追加的口气要求】', extra);
-  lines.push('', '【风格样本：只学语气与节奏，不许抄内容】', ...STYLE_SAMPLES);
+  if (!plain) lines.push('', '【风格样本：只学语气与节奏，不许抄内容】', ...STYLE_SAMPLES);
   return lines.join('\n');
 }
 
@@ -853,7 +887,9 @@ export async function optimize(ctx, config, text, style, preset, effort, routeOv
     error.code = warning === null ? 'OPTIMIZE_FAILED' : warning.code;
     throw error;
   }
-  return { text: hardenLocally(text), engine: 'local', route: null, ms: Date.now() - started, warning };
+  // `native` has no house voice to fall back on: hand the draft back as-is
+  // rather than wrapping it in a muscle-man shell the user asked not to have.
+  return { text: flavour === 'native' ? text.trim() : hardenLocally(text), engine: 'local', route: null, ms: Date.now() - started, warning };
 }
 
 /**
