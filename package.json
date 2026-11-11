@@ -16,7 +16,8 @@
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "docs"
+    "docs",
+    "preview"
   ],
   "scripts": {
     "test": "node tools/selftest.mjs",

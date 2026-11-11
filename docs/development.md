@@ -13,7 +13,7 @@ cd dsh-prompt-optimizer
 # 装开发期依赖（只有 eslint，运行时零依赖不受影响）
 npm install
 
-# 一把梭：语法体检 → lint → 离线 296 项自测
+# 一把梭：语法体检 → lint → 离线 297 项自测
 npm run check
 
 # 也可以单独跑
@@ -40,7 +40,7 @@ lint 门禁只在 Node 20/22 矩阵跑（ESLint 9 对 18.x 末端补丁有版本
 所以 `npm pack` 出来的包装上去照样零依赖。`docs/` 进包是因为 npm 页面会渲染 README，
 里面的文档链接必须在包内能解析。
 
-**验证覆盖**（296 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理；最后一组是工程治理断言（`package.json` 的 scripts 严格顺序与 `--max-warnings=0`、零运行时依赖、`files` 白名单 + 真实 `npm pack` 内容、`tools/asar.mjs` 的路径探测与 ls/cat/grep 回归、README 计数自洽）。
+**验证覆盖**（297 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理；最后一组是工程治理断言（`package.json` 的 scripts 严格顺序与 `--max-warnings=0`、零运行时依赖、`files` 白名单 + 真实 `npm pack` 内容、`tools/asar.mjs` 的路径探测与 ls/cat/grep 回归、README 计数自洽）。
 
 其中外观有三道锁：
 
@@ -70,7 +70,7 @@ package.json               dsh.bundle.patch / dsh.client 声明 + scripts + 发�
 package-lock.json          开发期依赖锁定（只有 eslint / @eslint/js）
 eslint.config.js           ESLint 9 flat config：语法规则 + 前后端全局
 .github/workflows/         CI：语法体检 + lint + 自测
-tools/selftest.mjs         离线自测（296 项）
+tools/selftest.mjs         离线自测（297 项）
 tools/preview.html         真组件预览 + 计算样式探测
 tools/asar.mjs             Electron ASAR 迷你读取器（本地侦察用）
 preview/harden-button.png  四态 + 菜单截图

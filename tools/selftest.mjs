@@ -1516,9 +1516,10 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 
 // --- what npm would actually publish ---------------------------------------
 {
-  // Runtime files plus the docs the README links to — npm renders the README on
-  // the package page, so a link into docs/ has to resolve inside the tarball too.
-  const whitelist = ['client.js', 'cordis.patch.yml', 'docs', 'index.js', 'LICENSE', 'README.md'];
+  // Runtime files plus everything the README points at: npm renders the README
+  // on the package page, so the docs links and the hero screenshot must resolve
+  // inside the tarball, not just in the working tree.
+  const whitelist = ['client.js', 'cordis.patch.yml', 'docs', 'index.js', 'LICENSE', 'preview', 'README.md'];
   const files = Array.isArray(pkg.files) ? pkg.files : [];
   // A bare `.` or `./tools` would also pass a naive "does not start with tools"
   // check while packing the whole repository, so pin the list itself.
@@ -1566,6 +1567,22 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
       packed.every((path) => !path.startsWith('tmp/') && !path.startsWith('.trellis/') && !path.startsWith('.dsh')),
       JSON.stringify(packed),
     );
+    // The real contract: whatever the README points at has to exist in the
+    // tarball, because npm renders that README on the package page. A missing
+    // screenshot or doc is a broken page for every installer.
+    {
+      const readmeText = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+      const localLinks = [...readmeText.matchAll(/\]\(([^)\s]+)\)/g)]
+        .map((match) => match[1])
+        .filter((target) => !/^https?:/i.test(target) && !target.startsWith('#'))
+        .map((target) => target.replace(/^\.\//, ''));
+      const missing = localLinks.filter((target) => !packed.includes(target));
+      check(
+        'every local link in the README resolves inside the tarball',
+        localLinks.length >= 6 && missing.length === 0,
+        'links=' + localLinks.length + ' missing=' + JSON.stringify(missing),
+      );
+    }
   }
 }
 

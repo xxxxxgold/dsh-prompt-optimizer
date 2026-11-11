@@ -114,7 +114,7 @@ README 三处自测计数（`离线 N 项`、`验证覆盖**（N 项）`、`离�
 | 语法 | `node --check index.js client.js` 必须通过 |
 | 风格 | `eslint . --max-warnings=0`，**0 error / 0 warning** |
 | 行为 | `node tools/selftest.mjs` 全绿（当前 296 项） |
-| 发布包 | `npm pack --dry-run` 11 个文件（6 个运行时 + 5 个 docs）、无 `tools/` |
+| 发布包 | `npm pack --dry-run` 12 个文件（6 个运行时 + 5 个 docs + 1 张截图）、无 `tools/`；README 的每个本地链接都必须在包内可解析 |
 | 渲染 | 改动 `client.js` 后，用无头浏览器渲染 `tools/preview.html` 对比截图 |
 
 自测的沙箱方式：宿主半直接 `import` 并挂到假的 Cordis context；客户端半在 `node:vm` 里跑，
