@@ -7,9 +7,13 @@ scratch/
 # 临时/产物
 *.log
 *.tmp
+tmp/
 .DS_Store
 Thumbs.db
 preview/*.tmp
+
+# Trellis 本地运维备份（技能安装/升级前的快照，只对本机有意义）
+.dsh-ops/
 
 # 编辑器
 .vscode/
