@@ -44,8 +44,14 @@
 window.__ModuleLoader__.load({
   id: 'dsh-prompt-optimizer',
   factory: (require) => {
-    var module = { exports: {} };
-    var exports = module.exports;
+    // CJS 作用域模拟：包装层要复刻一个模块文件里 `module` / `exports` 的绑定，
+    // 供下面的 `exports.xxx` 挂载和末尾的 `return module.exports` 使用。
+    // 前提：宿主 `__ModuleLoader__` 以 `factory(require)` 调用，只传一个 `require`，
+    // 不注入 `module` / `exports`（已对照 dsh-client-modules 的 materialize 与全部官方
+    // bundle 的生成模式核实）。在这个前提下两者只做属性读写、从不整体重赋值，
+    // `const` 与 CJS 的 `var` 等价；若宿主契约改成注入同名参数，需改回 `var`。
+    const module = { exports: {} };
+    const exports = module.exports;
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 
     const react = require('react');

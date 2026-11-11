@@ -815,7 +815,7 @@ export async function optimize(ctx, config, text, style, preset, effort, routeOv
           let expanded = '';
           try {
             expanded = sanitizeOutput(await streamRewrite(llm, route, system, buildExpandPrompt(text, shape, clean), request));
-          } catch (repairError) {
+          } catch {
             expanded = '';
           }
           if (expanded !== '' && !isThin(expanded, shape)) {
