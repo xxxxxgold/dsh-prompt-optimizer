@@ -65,6 +65,21 @@ These guides help you **ask the right questions before coding**.
 
 **Verification rule**: Every CRITICAL/WARNING finding must be verified against the actual code before prioritizing. Budget ~35% false-positive rate for AI reviews.
 
+### When Writing Assertions (this repo's hardest-won lesson)
+
+三轮独立审查在本仓库打出的所有 blocking 问题，都是同一类：**断言无法失败**。
+写完一条检查，先问「它怎么才可能红」，答不出来就是假绿灯。
+
+| 反模式 | 本仓库的真实案例 | 判别方法 |
+|---|---|---|
+| 子串匹配代替行为检查 | `scripts.lint.includes('--max-warnings=0')` 被 `echo --max-warnings=0` 骗过 | 分词后验证可执行文件与参数，并拒绝 shell 元字符 |
+| 两侧同源的自比较 | `resolve().candidates === candidatePaths(同一 env)` | 与字面量比，不要重算 |
+| 只在不会触发条件的输入上验证 | 用 `X:\PF` 测「去重」（该输入本就不产生重复） | 找出真正会撞车的输入（此处是 `C:\Program Files`） |
+| 只比长度 | `candidates.length === expected.length` | 比完整集合或具体成员 |
+| 只看声明不看事实 | 只读 `package.json.files`，不跑 `npm pack` | 让被测对象自己产出证据 |
+
+→ 细节与完整清单见 [Quality Guidelines](../frontend/quality-guidelines.md)
+
 ---
 
 ## Pre-Modification Rule (CRITICAL)

@@ -4,7 +4,7 @@
 >
 > A hard-boiled prompt rewriter for the DeepSeek Harness composer.
 
-[![selftest](https://github.com/asdnmy123/dsh-prompt-optimizer/actions/workflows/selftest.yml/badge.svg)](https://github.com/asdnmy123/dsh-prompt-optimizer/actions/workflows/selftest.yml)
+[![selftest](https://github.com/xxxxxgold/dsh-prompt-optimizer/actions/workflows/selftest.yml/badge.svg)](https://github.com/xxxxxgold/dsh-prompt-optimizer/actions/workflows/selftest.yml)
 ![license](https://img.shields.io/badge/license-MIT-ff6a00)
 ![node](https://img.shields.io/badge/node-%E2%89%A518-43853d)
 ![deps](https://img.shields.io/badge/runtime%20deps-0-black)
@@ -89,7 +89,7 @@ DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出�
 2. 在安装框里粘这一行，确认：
 
    ```
-   github:asdnmy123/dsh-prompt-optimizer
+   github:xxxxxgold/dsh-prompt-optimizer
    ```
 
 3. 装完**刷新页面**（`Ctrl+R`），输入框左下角就该有 `♂harden`。
@@ -97,14 +97,14 @@ DSH 对话输入框左下角多出一个 **`♂harden`** 按钮。点它弹出�
 **CLI 版（非 Electron 托管的 profile）**：
 
 ```powershell
-dsh plugin --profile <你的-profile> add github:asdnmy123/dsh-prompt-optimizer
+dsh plugin --profile <你的-profile> add github:xxxxxgold/dsh-prompt-optimizer
 ```
 
 ### 路子二：本机目录（开发用，改代码即时生效）
 
 ```powershell
 # 1. 拉到本地
-git clone https://github.com/asdnmy123/dsh-prompt-optimizer.git D:\dsh-plugins\dsh-prompt-optimizer
+git clone https://github.com/xxxxxgold/dsh-prompt-optimizer.git D:\dsh-plugins\dsh-prompt-optimizer
 
 # 2A. CLI 版：link 进去
 dsh plugin --profile <你的-profile> add link:D:\dsh-plugins\dsh-prompt-optimizer
@@ -158,7 +158,7 @@ dsh plugin --profile <你的-profile> add link:D:\dsh-plugins\dsh-prompt-optimiz
 ```powershell
 # 1. 宿主半活着吗？（端口换成你 DSH 的实际端口）
 curl.exe http://127.0.0.1:19387/dsh-prompt-optimizer/health
-# → {"ok":true,"plugin":"dsh-prompt-optimizer","version":"0.6.1","style":"hard","styles":["native","hard","team","cool"],"localFallback":true}
+# → {"ok":true,"plugin":"dsh-prompt-optimizer","version":"0.6.1","style":"hard","styles":["native","hard","team","cool"],"preset":"native","presets":["native","feat","issue","refactor"],"localFallback":true,"maxTokens":"model","reasoningEffort":"selection","motion":"always"}
 
 # 2. 插件在不在清单里
 dsh plugin --profile <你的-profile> list
@@ -304,7 +304,7 @@ POST /dsh-prompt-optimizer/probe          # 诊断：原样跑一次模型调用
 > 安装者不需要也不能运行它们；插件本身零运行时依赖。
 
 ```powershell
-git clone https://github.com/asdnmy123/dsh-prompt-optimizer.git
+git clone https://github.com/xxxxxgold/dsh-prompt-optimizer.git
 cd dsh-prompt-optimizer
 
 # 装开发期依赖（只有 eslint，运行时零依赖不受影响）
