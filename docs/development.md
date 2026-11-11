@@ -36,9 +36,29 @@ lint 门禁只在 Node 20/22 矩阵跑（ESLint 9 对 18.x 末端补丁有版本
 
 **开发期依赖与发布包无关**：`eslint` / `@eslint/js` 只列在 `devDependencies`，
 `package.json` 的 `files` 白名单只放运行时与文档（`index.js` / `client.js` / `cordis.patch.yml` /
-`README.md` / `LICENSE` / `docs`），既不含 `devDependencies` 也不含 `tools/`，
-所以 `npm pack` 出来的包装上去照样零依赖。`docs/` 进包是因为 npm 页面会渲染 README，
-里面的文档链接必须在包内能解析。
+`README.md` / `LICENSE` / `docs` / `preview`），既不含 `devDependencies` 也不含 `tools/`，
+所以 `npm pack` 出来的包装上去照样零依赖。`docs/` 与 `preview/` 进包是因为 npm 页面会渲染 README，
+里面的文档链接和那张主截图必须在包内能解析。
+
+### CI 没跑起来时，本地怎么验同一个矩阵
+
+仓库的 workflow 已经就位，但**它需要仓库启用 GitHub Actions 才会触发**。如果 badge 一直显示
+unknown，说明 Actions 还没开（Settings → Actions → General）。
+
+不依赖 CI 也能跑同一套矩阵 —— 用 npm 的 `node` 包临时取指定版本：
+
+```powershell
+npx --yes node@18 tools/selftest.mjs
+npx --yes node@20 tools/selftest.mjs
+npx --yes node@22 tools/selftest.mjs
+
+# lint 用同一个运行时
+npx --yes node@18 node_modules/eslint/bin/eslint.js . --max-warnings=0
+```
+
+2026-11-11 实测：**18.20.8 / 20.20.2 / 22.20.0 三个版本均 `PASS — 297 passed, 0 failed`**，
+ESLint 在 18.20.8、20.20.2、22.20.0 上均 0 告警，`node --check` 三个入口文件全通过。
+
 
 **验证覆盖**（297 项）：模块名/inject、系统提示词铁律与样本、口味切换、Trellis 规范骨架（三种骨架 + 非法值回落 + 规范不吃掉口味）、输出卫生（代码围栏/前言/客套）、配置归一化、路由解析、流式拼接与失败码、本地兜底、`PRESET_NEEDS_MODEL`、短答打回重锻（`EXPANDED` / `THIN_OUTPUT`）、HTTP 各状态码、客户端 `__ModuleLoader__` 加载契约、字典、插槽注册元数据、菜单两行七个 chip 的文案与高亮、props 缺失不渲染、样式表注入与清理；最后一组是工程治理断言（`package.json` 的 scripts 严格顺序与 `--max-warnings=0`、零运行时依赖、`files` 白名单 + 真实 `npm pack` 内容、`tools/asar.mjs` 的路径探测与 ls/cat/grep 回归、README 计数自洽）。
 
