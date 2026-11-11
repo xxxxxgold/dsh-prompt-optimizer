@@ -15,9 +15,17 @@
     "client.js",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE",
-    "tools"
+    "LICENSE"
   ],
+  "scripts": {
+    "test": "node tools/selftest.mjs",
+    "lint": "eslint . --max-warnings=0",
+    "check": "node --check index.js && node --check client.js && eslint . --max-warnings=0 && node tools/selftest.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5"
+  },
   "keywords": [
     "dsh",
     "dsh-plugin",

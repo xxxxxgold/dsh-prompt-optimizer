@@ -19,9 +19,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: 离线自测（零依赖）
-        run: node tools/selftest.mjs
       - name: 语法体检
         run: |
           node --check index.js
           node --check client.js
+      - name: 离线自测（零运行时依赖）
+        run: node tools/selftest.mjs
+
+  lint:
+    runs-on: ubuntu-latest
+    # ESLint 9 要求 Node ^18.18 / ^20.9 / >=21.1。`18` 别名会装到当前 18.x 最新补丁，
+    # 通常可用，但把门禁固定在这两条 LTS 线上，避免新 runner 镜像的补丁版本滞后时假红。
+    strategy:
+      matrix:
+        node: [20, 22]
+    name: lint / node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: 安装开发期依赖
+        run: npm ci
+      - name: ESLint（0 error / 0 warning）
+        run: npm run lint

@@ -16,8 +16,13 @@
  *
  * Exits non-zero on any failed check.
  */
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { candidatePaths, describeResolutionFailure, loadAsar, resolveAsarPath, run as runAsar } from './asar.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -1465,6 +1470,261 @@ section('effort fallback');
   check('an adapter without this effort still answers', body.ok === true && body.text === HARDENED, JSON.stringify(body).slice(0, 120));
   check('the effort from the config row is sent first', seen[0].reasoningEffort === 'low', String(seen[0].reasoningEffort));
   check('the retry drops the effort', seen.length === 2 && seen[1].reasoningEffort === undefined, String(seen.length));
+}
+
+// ---------------------------------------------------------------------------
+// Project plumbing: the gates a contributor actually runs
+// ---------------------------------------------------------------------------
+section('project plumbing');
+
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
+{
+  check('package.json exposes a test script', pkg.scripts?.test === 'node tools/selftest.mjs', String(pkg.scripts && pkg.scripts.test));
+  // Tokenise instead of grepping: `echo --max-warnings=0` carries the flag but is
+  // not a linter. Shell metacharacters are rejected too, so `eslint . --max-warnings=0 || true`
+  // cannot smuggle a swallowed failure past the gate.
+  const lintTokens = typeof pkg.scripts?.lint === 'string' ? pkg.scripts.lint.trim().split(/\s+/) : [];
+  check(
+    'the lint script runs eslint itself with a warning gate',
+    lintTokens[0] === 'eslint' &&
+      lintTokens.includes('.') &&
+      lintTokens.includes('--max-warnings=0') &&
+      !/[|&;<>]/.test(pkg.scripts.lint),
+    JSON.stringify(lintTokens),
+  );
+  // Exact steps, in order, joined by `&&`: a substring check would accept a
+  // reordered pipeline or a `;` that swallows the first failure.
+  const checkSteps = typeof pkg.scripts?.check === 'string' ? pkg.scripts.check.split('&&').map((step) => step.trim()) : [];
+  check(
+    'the check script runs syntax, lint, then the self-test',
+    JSON.stringify(checkSteps) ===
+      JSON.stringify(['node --check index.js', 'node --check client.js', 'eslint . --max-warnings=0', 'node tools/selftest.mjs']),
+    JSON.stringify(checkSteps),
+  );
+  // Zero runtime dependencies is the package's headline promise: nothing may leak
+  // into an install-time dependency bucket, and both tool packages must be dev-only.
+  const runtimeBuckets = ['dependencies', 'optionalDependencies', 'peerDependencies'];
+  const leaked = runtimeBuckets.filter((bucket) => pkg[bucket] !== undefined && Object.keys(pkg[bucket]).length > 0);
+  check('the package ships no runtime dependencies', leaked.length === 0, JSON.stringify(leaked.map((bucket) => [bucket, pkg[bucket]])));
+  check(
+    'both lint packages are dev dependencies with a pinned range',
+    ['eslint', '@eslint/js'].every((name) => typeof pkg.devDependencies?.[name] === 'string' && /^\^\d+\.\d+\.\d+$/.test(pkg.devDependencies[name])),
+    JSON.stringify(pkg.devDependencies || {}),
+  );
+}
+
+// --- what npm would actually publish ---------------------------------------
+{
+  const whitelist = ['client.js', 'cordis.patch.yml', 'index.js', 'LICENSE', 'README.md'];
+  const files = Array.isArray(pkg.files) ? pkg.files : [];
+  // A bare `.` or `./tools` would also pass a naive "does not start with tools"
+  // check while packing the whole repository, so pin the list itself.
+  // Compare sorted copies: the on-disk order is not meaningful, membership is.
+  check(
+    'the files whitelist is exactly the runtime set',
+    JSON.stringify([...files].sort()) === JSON.stringify([...whitelist].sort()),
+    JSON.stringify(files),
+  );
+  check(
+    'the files whitelist holds no directory or glob entries',
+    files.every((entry) => typeof entry === 'string' && entry !== '' && entry !== '.' && entry !== './' && !entry.startsWith('./') && !entry.startsWith('../') && !entry.includes('*')),
+    JSON.stringify(files),
+  );
+
+  // The whitelist is a declaration; the tarball is the fact. Ask npm itself.
+  let packed = null;
+  let packError = '';
+  try {
+    const out = execFileSync('npm', ['pack', '--dry-run', '--json'], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
+      timeout: 120000,
+    });
+    packed = JSON.parse(out)[0].files.map((entry) => entry.path);
+  } catch (error) {
+    packError = String(error && error.message ? error.message : error);
+  }
+  check('npm pack --dry-run answers', packed !== null, packError.slice(0, 200));
+  if (packed !== null) {
+    check(
+      'the published tarball carries no developer tools',
+      packed.every((path) => !path.startsWith('tools/') && path !== 'tools'),
+      JSON.stringify(packed),
+    );
+    check(
+      'the published tarball still carries every runtime file',
+      ['index.js', 'client.js', 'cordis.patch.yml', 'README.md', 'LICENSE', 'package.json'].every((path) => packed.includes(path)),
+      JSON.stringify(packed),
+    );
+    check(
+      'the published tarball carries no working-tree leftovers',
+      packed.every((path) => !path.startsWith('tmp/') && !path.startsWith('.trellis/') && !path.startsWith('.dsh')),
+      JSON.stringify(packed),
+    );
+  }
+}
+
+// --- the asar reader: resolution and the three commands --------------------
+{
+  const candidates = candidatePaths({ ProgramFiles: 'X:\\PF', LOCALAPPDATA: 'X:\\L\\AppData\\Local' }, 'win32');
+  check(
+    'asar uses the platform-provided roots',
+    candidates.includes('X:/PF/DeepSeek Harness/resources/app.asar') &&
+      candidates.includes('X:/L/AppData/Local/Programs/DeepSeek Harness/resources/app.asar'),
+    JSON.stringify(candidates.slice(0, 2)),
+  );
+  check('asar candidates cover a macOS bundle', candidates.includes('/Applications/DeepSeek Harness.app/Contents/Resources/app.asar'), String(candidates.length));
+  // `C:\Program Files` is the only input that produces a real collision: it comes
+  // in twice (from `env.ProgramFiles` and from the hard-coded `C:` drive literal).
+  // With no other env vars set that leaves 8 candidates: C:/PF, C:/PF (x86),
+  // D:/PF, D:/PF (x86), E:/PF, E:/PF (x86), the macOS bundle and /opt.
+  // `X:\PF` produces no collision at all, so it would let a broken dedupe pass.
+  const colliding = candidatePaths({ ProgramFiles: 'C:\\Program Files' }, 'win32');
+  check(
+    'asar candidates are de-duplicated',
+    colliding.length === new Set(colliding).size && colliding.length === 8,
+    'count=' + colliding.length + ' unique=' + new Set(colliding).size,
+  );
+  const posix = candidatePaths({}, 'darwin');
+  check(
+    'asar never invents Windows drives on a POSIX host',
+    posix.every((path) => !/^[A-Z]:\//.test(path)),
+    JSON.stringify(posix),
+  );
+  check('asar trims whitespace around a configured root', candidatePaths({ ProgramFiles: '  X:\\PF  ' }, 'win32').includes('X:/PF/DeepSeek Harness/resources/app.asar'));
+
+  const hit = resolveAsarPath({ DSH_ASAR: '/x/app.asar' }, (path) => path === '/x/app.asar', 'win32');
+  check('asar honours an explicit DSH_ASAR', hit.path === '/x/app.asar' && hit.source === 'env', JSON.stringify(hit));
+
+  const typo = resolveAsarPath({ DSH_ASAR: '/x/nope.asar' }, () => false, 'win32');
+  check(
+    'a missing explicit DSH_ASAR is reported as a typo, not searched around',
+    typo.path === null && typo.source === 'env-missing' && typo.explicit === '/x/nope.asar',
+    JSON.stringify({ path: typo.path, source: typo.source }),
+  );
+
+  const probed = resolveAsarPath({ ProgramFiles: 'X:\\PF' }, (path) => path.startsWith('X:/PF/'), 'win32');
+  check('asar probes the candidates when no override is set', probed.source === 'probe' && probed.path.startsWith('X:/PF/'), JSON.stringify(probed));
+
+  const nothing = resolveAsarPath({ ProgramFiles: 'X:\\PF' }, () => false, 'win32');
+  // Assert against literals, not against a second call to the same function:
+  // recomputing both sides would make this comparison tautological and it would
+  // pass even if `candidatePaths` itself were wrong.
+  check(
+    'asar reports every candidate when nothing exists',
+    nothing.path === null &&
+      nothing.source === 'missing' &&
+      Array.isArray(nothing.candidates) &&
+      nothing.candidates.includes('X:/PF/DeepSeek Harness/resources/app.asar') &&
+      nothing.candidates.includes('/Applications/DeepSeek Harness.app/Contents/Resources/app.asar') &&
+      nothing.candidates.every((path) => path.endsWith('DeepSeek Harness/resources/app.asar') || path.endsWith('DeepSeek Harness.app/Contents/Resources/app.asar')),
+    JSON.stringify({ source: nothing.source, first: nothing.candidates[0], count: nothing.candidates.length }),
+  );
+
+  const failure = describeResolutionFailure(nothing).join('\n');
+  check('the failure text names DSH_ASAR', failure.includes('DSH_ASAR'), failure.slice(0, 80));
+  check('the failure text shows a PowerShell form', failure.includes('$env:DSH_ASAR'), failure.slice(-160));
+  const envFailure = describeResolutionFailure(typo).join('\n');
+  check('a typo is reported as a missing file, not a search', envFailure.includes('/x/nope.asar') && envFailure.includes('DSH_ASAR'), envFailure.slice(0, 80));
+}
+
+// --- the asar reader: ls / cat / grep over a fixture ----------------------
+{
+  /** Build a minimal but structurally valid asar holding `{ name: text }`. */
+  const buildAsar = (entries) => {
+    const payloads = [];
+    const files = {};
+    let offset = 0;
+    for (const [name, content] of Object.entries(entries)) {
+      const data = Buffer.from(content, 'utf8');
+      files[name] = { size: data.length, offset: String(offset) };
+      payloads.push(data);
+      offset += data.length;
+    }
+    const json = Buffer.from(JSON.stringify({ files }), 'utf8');
+    const padding = (4 - (json.length % 4)) % 4;
+    // The pickle starts at byte 8: 4 bytes of inner size field + 4 bytes of
+    // json length + the json + padding. `loadAsar` derives the payload base as
+    // `8 + pickleSize`, so the header is `8 + pickleSize` bytes long.
+    const pickleSize = 8 + json.length + padding;
+    const header = Buffer.alloc(8 + pickleSize);
+    header.writeUInt32LE(4, 0);
+    header.writeUInt32LE(pickleSize, 4);
+    header.writeUInt32LE(4, 8);
+    header.writeUInt32LE(json.length, 12);
+    json.copy(header, 16);
+    return Buffer.concat([header, ...payloads]);
+  };
+
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-po-asar-'));
+  const asarPath = join(dir, 'fixture.asar');
+  try {
+    writeFileSync(
+      asarPath,
+      buildAsar({
+        'pkg/a.js': 'const marker = "needle-in-asar";\nexport default marker;\n',
+        'pkg/b.json': '{"ok":true}',
+        'pkg/skip.png': 'binary',
+        // A path outside the probed prefix: if the implementation silently
+        // ignored its filter, the counts below would come out at 4 instead of 3.
+        'other/c.js': 'const decoy = "needle-in-asar";\n',
+      }),
+    );
+
+    const loaded = loadAsar(asarPath);
+    check('fixture asar lists every entry', loaded.files.size === 4, String(loaded.files.size));
+    check('fixture asar nests directories', loaded.files.has('pkg/a.js') && loaded.files.has('other/c.js'), [...loaded.files.keys()].join(','));
+
+    const collected = { out: [], err: [], write: [] };
+    const io = { out: (line) => collected.out.push(line), err: (line) => collected.err.push(line), write: (text) => collected.write.push(text) };
+
+    const code = runAsar(['ls', 'pkg/'], asarPath, io);
+    check(
+      'asar ls exits 0 and returns exactly the matching paths',
+      code === 0 && JSON.stringify([...collected.out].sort()) === JSON.stringify(['pkg/a.js', 'pkg/b.json', 'pkg/skip.png']),
+      JSON.stringify(collected.out),
+    );
+    check('asar ls reports the totals', collected.err.join('\n').includes('total files: 4, matched: 3'), collected.err.join(' / '));
+
+    collected.out.length = 0;
+    collected.err.length = 0;
+    check('asar cat exits 0', runAsar(['cat', 'pkg/b.json'], asarPath, io) === 0, '');
+    check('asar cat writes the exact bytes', collected.write.join('') === '{"ok":true}', JSON.stringify(collected.write));
+
+    collected.out.length = 0;
+    collected.err.length = 0;
+    check('asar grep exits 0 and finds the marker', runAsar(['grep', 'needle-in-asar', 'pkg/'], asarPath, io) === 0 && collected.out.length === 1, JSON.stringify(collected.out));
+    check('asar grep reports its hit count', collected.err.join('\n').includes('hits: 1'), collected.err.join(' / '));
+
+    collected.out.length = 0;
+    collected.err.length = 0;
+    check('asar rejects an unknown command with exit 2', runAsar(['nope'], asarPath, io) === 2, '');
+    check('asar prints the usage on an unknown command', collected.err.join('\n').includes('usage:'), collected.err.join(' / '));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// --- README claims must match this run -------------------------------------
+// This guard exists because the published count drifted before (README claimed
+// 248 while the suite had grown). Keep the assertion LAST: `total` counts the
+// checks before it plus itself, so anything appended after this would silently
+// invalidate the comparison. The pattern is deliberately narrow — only the three
+// places that state the suite size may carry a number.
+{
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const claims = [...readme.matchAll(/离线 (\d+) 项|验证覆盖\*\*（(\d+) 项）|离线自测（(\d+) 项）/g)].map((match) =>
+    Number(match[1] ?? match[2] ?? match[3]),
+  );
+  const total = passed + failed + 1;
+  check(
+    'README states this exact check count',
+    claims.length === 3 && claims.every((count) => count === total),
+    'README=' + JSON.stringify(claims) + ' actual=' + total,
+  );
 }
 
 console.log('\n' + (failed === 0 ? 'PASS' : 'FAIL') + ' — ' + passed + ' passed, ' + failed + ' failed');
