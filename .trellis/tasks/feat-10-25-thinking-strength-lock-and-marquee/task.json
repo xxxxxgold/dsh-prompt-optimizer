@@ -1,0 +1,133 @@
+{
+  "title": "思考强度默认跟随与锁定 + 生成中边框跑马灯",
+  "status": "completed",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "check",
+    "execution_lane": "standard"
+  },
+  "description": "三条线：1) 生成中状态加边框跑马灯动效（先可行性结论再实现）；2) 思考强度默认值改为首次取当前模型挡位、非首次取上一次设定，挡位读当前模型；3) 新增插件内锻造模型选择项（默认当前 DSH 模型）+ 锁定开关（锁定后模型与思考强度不再变动）；4) 无思考强度挡位的模型隐藏思考强度；收尾按测试→远程 git 提交→项目卫生→刷新插件到 desktop profile 顺序执行。",
+  "steps": [
+    {
+      "id": "step-1",
+      "title": "摸清三张图对应的组件、状态存储与配置读取位置，列出改动点清单",
+      "status": "completed",
+      "acceptance": [
+        "清单覆盖图1、图2、图3 与无挡位隐藏四项，无遗漏"
+      ],
+      "verification": "human",
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "用户已确认改动点清单：覆盖图1/图2/图3/无挡位隐藏四项，无遗漏。"
+    },
+    {
+      "id": "step-2",
+      "title": "图1 生成中状态跑马灯动效：先出可行性结论，能上就给实现方案",
+      "status": "completed",
+      "acceptance": [
+        "结论明确 + 方案可直接落地"
+      ],
+      "verification": "human",
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "用户已确认跑马灯可行性结论与 6 帧实拍效果；CSS-only，1.05s，reduced-motion 停动。"
+    },
+    {
+      "id": "step-3",
+      "title": "图2 思考强度默认值改造：首次=模型思考强度，再次=上一次设定，挡位读当前模型挡位",
+      "status": "completed",
+      "acceptance": [
+        "三条子项逐条手动复现通过"
+      ],
+      "verification": "human",
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "用户接受自动化契约测试与代码走查作为逻辑验收：首次=模型默认、非首次=该模型上次设定、挡位随当前/选中模型；真实界面点验放到最终统一人工确认。"
+    },
+    {
+      "id": "step-4",
+      "title": "图3 选择项 + 锁定：默认当前模型，锁定后思考强度与默认模型不再变动",
+      "status": "completed",
+      "acceptance": [
+        "默认值正确，锁定前后行为差异可复现"
+      ],
+      "verification": "human",
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "用户接受结构/端点契约测试作为逻辑验收：模型行默认当前模型、锁定后 select 与 effort 全禁用、快照优先；真实界面锁定—切换—解锁放到最终统一确认。"
+    },
+    {
+      "id": "step-5",
+      "title": "无挡位隐藏：配置里没有思考强度挡位的模型不显示思考强度",
+      "status": "completed",
+      "acceptance": [
+        "该类模型界面上看不到思考强度"
+      ],
+      "verification": "human",
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "用户接受自动化结构测试作为逻辑验收：efforts 为空时思考强度整行不渲染，且请求不带 reasoningEffort；真实界面用无挡位模型点验放到最终统一确认。"
+    },
+    {
+      "id": "step-6",
+      "title": "全量测试，确保没有问题",
+      "status": "completed",
+      "acceptance": [
+        "测试全部通过、无报错"
+      ],
+      "verification": "ai",
+      "verified": true,
+      "verifiedBy": "ai",
+      "verificationNotes": "node tools/selftest.mjs -> PASS 228 passed, 0 failed；node --check 均通过。"
+    },
+    {
+      "id": "step-7",
+      "title": "测试通过后提交远程 git",
+      "status": "completed",
+      "acceptance": [
+        "远程仓库能看到本次提交"
+      ],
+      "verification": "human",
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "用户确认：功能提交 f75374c + Trellis 属性 13a446c 已推送 origin/main，远程 HEAD 13a446c。"
+    },
+    {
+      "id": "step-8",
+      "title": "清理项目卫生",
+      "status": "completed",
+      "acceptance": [
+        "无临时文件、无调试代码残留"
+      ],
+      "verification": "human",
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "用户确认：git status 只剩 .agents/.dsh-ops/.dsh/.trellis/AGENTS.md 工具目录；preview 仅正式图；无临时文件/调试残留。"
+    },
+    {
+      "id": "step-9",
+      "title": "更新 dsh 的插件到最新版本（刷新到 desktop profile）",
+      "status": "completed",
+      "acceptance": [
+        "插件版本为最新版本"
+      ],
+      "verification": "human",
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "用户确认：desktop profile 安装副本 0.6.1，client/index/package 哈希一致，profile 依赖 URL 指向 13a446c。"
+    },
+    {
+      "id": "step-10",
+      "title": "扁平化菜单 UI：锁定改开关、模型与思考强度并一行",
+      "status": "completed",
+      "acceptance": [
+        "锁定为 toggle 开关；模型与思考强度同一行，只保留挡位 chips；菜单整体扁平紧凑，无粗大控件"
+      ],
+      "verification": "human",
+      "verificationNotes": "用户确认新版扁平 UI：模型+Low/High/Max+锁定 toggle 同一行；230 项测试通过；预览图已更新。",
+      "verified": true,
+      "verifiedBy": "human"
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "title": "测试与工程治理加固：lint 门禁、npm scripts、打包瘦身、文档校正",
+  "status": "in_progress",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "finish",
+    "execution_lane": "standard"
+  },
+  "description": "修复全量检测发现的 6 项工程治理问题：asar 默认路径过期、缺 npm scripts、CI 无 lint 门禁、发布包混入开发工具、CJS 包装层缺说明、README 计数过时。不改变插件运行时行为。",
+  "steps": [
+    {
+      "id": "s1",
+      "title": "新建仓库根 eslint.config.js 并接入 package.json",
+      "status": "completed",
+      "spec": "ESLint 9 flat config；规则集 js.configs.recommended + 手写 node/browser globals；package.json 补 scripts（test/lint/check）、devDependencies，files 收窄到发布必需项。",
+      "acceptance": [
+        "npm run lint 退出码 0 且 0 error 0 warning",
+        "npx eslint . 可在仓库根直接运行",
+        "npm test 转发到 node tools/selftest.mjs"
+      ],
+      "verification": "ai",
+      "verified": true,
+      "verifiedBy": "ai",
+      "verificationNotes": "npm run lint 退出码 0；npx eslint . 无输出；npm test 输出 276 passed。"
+    },
+    {
+      "id": "s2",
+      "title": "清理 client.js 与 index.js 的 lint 告警",
+      "status": "completed",
+      "spec": "client.js 的 CJS 包装层改用 const（核实 exports 只做属性挂载、从不整体重赋值，语义等价）并补理由注释；index.js 去掉未使用的 catch 绑定。两处均为零行为变更。",
+      "acceptance": [
+        "client.js 功能逻辑零改动",
+        "npm run lint 0 warning",
+        "node tools/selftest.mjs 仍全绿",
+        "无头 Chrome 渲染结果与改动前一致"
+      ],
+      "verification": "ai",
+      "verified": true,
+      "verifiedBy": "ai",
+      "verificationNotes": "lint 0 error 0 warning；276 passed；preview.html 截图 92299 字节 vs 改动前 92301 字节，肉眼一致。"
+    },
+    {
+      "id": "s3",
+      "title": "tools/asar.mjs 默认 ASAR 路径改为可移植探测",
+      "status": "completed",
+      "spec": "解析顺序：DSH_ASAR 环境变量 → 有限候选路径探测 → 全失败时报候选与用法并 exit 1。候选覆盖 Windows 常见安装根与 macOS .app；不扫描磁盘。导出 candidatePaths / resolveAsarPath 供测试。",
+      "acceptance": [
+        "DSH_ASAR 指向真实 asar 时 ls/grep 正常工作",
+        "候选全部不存在时报错信息含 DSH_ASAR 且退出码非 0",
+        "不扫描整个磁盘"
+      ],
+      "verification": "ai",
+      "verified": true,
+      "verifiedBy": "ai",
+      "verificationNotes": "本机自动探测命中 D:/Program Files（18309 文件）；DSH_ASAR 覆盖生效；指向不存在文件 exit 1 且提示清晰；全无候选返回 missing+candidates。"
+    },
+    {
+      "id": "s4",
+      "title": "selftest 新增 14 条工程治理断言",
+      "status": "completed",
+      "spec": "覆盖 package.json scripts / devDependencies / files 白名单、asar 路径解析五种情形、README 计数与实际 passed 自洽（防止再次漂移）。",
+      "acceptance": [
+        "node tools/selftest.mjs 全绿",
+        "新增断言能在 README 数字不符时失败",
+        "README 计数与实际 passed 完全一致"
+      ],
+      "verification": "ai",
+      "verified": true,
+      "verifiedBy": "ai",
+      "verificationNotes": "首轮故意让 README 保持 248，断言如期 FAIL（README=[248,248,248] actual=276）；改为 276 后 PASS。"
+    },
+    {
+      "id": "s5",
+      "title": "CI 增加 lint 门禁",
+      "status": "completed",
+      "spec": "新增独立 lint job，仅在 Node 20/22 运行；selftest job 保持 18/20/22 并调整为先语法后自测。",
+      "acceptance": [
+        "workflow YAML 语法有效",
+        "lint 步骤有 node 版本条件",
+        "语法体检先于自测"
+      ],
+      "verification": "ai",
+      "verified": true,
+      "verifiedBy": "ai",
+      "verificationNotes": "python yaml.safe_load 解析通过；lint job matrix 为 [20, 22]；selftest job 顺序为语法→自测。"
+    },
+    {
+      "id": "s6",
+      "title": "README 计数与目录校正",
+      "status": "completed",
+      "spec": "三处 248 改为实际 276；开发段改为 npm run check 入口并说明 devDependencies 与发布包无关；目录段补 eslint.config.js / package-lock.json 与发布边界说明。",
+      "acceptance": [
+        "grep 248 README.md 无输出",
+        "README 计数与 selftest 输出一致",
+        "目录段列全仓库文件"
+      ],
+      "verification": "ai",
+      "verified": true,
+      "verifiedBy": "ai",
+      "verificationNotes": "grep 248 无命中；README 三处均为 276；目录段补齐 4 个条目并标注 tools/ 不进发布包。"
+    },
+    {
+      "id": "s7",
+      "title": "全量验证与改动边界复核",
+      "status": "completed",
+      "spec": "依次跑语法检查、lint、自测、npm run check、npm pack --dry-run，并用 git diff 确认改动边界。",
+      "acceptance": [
+        "所有命令退出码 0",
+        "npm pack --dry-run 不含 tools/",
+        "npm pack --dry-run 含 index.js client.js cordis.patch.yml README.md LICENSE package.json",
+        "git diff --stat 显示 README 改动为小范围而非整体行尾重写"
+      ],
+      "verification": "ai",
+      "verified": true,
+      "verifiedBy": "ai",
+      "verificationNotes": "npm run check → PASS 296/296 exit 0；npm run lint → 0 告警 exit 0；npm pack --dry-run → 6 文件无 tools；README 三处计数均为 296；git diff index.js 仅 1 行 catch 绑定、client.js 仅注释与 var→const；两轮独立复审后最终 status: passed。"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "title": "全方位全面测试，确保项目一点问题都没有",
+  "status": "completed",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "check",
+    "execution_lane": "standard"
+  },
+  "description": "对 dsh-prompt-optimizer 做全档测试：仓库离线自测 + 语法体检 + 静态审计 + 跨 Node 18/20/22 + 真机 E2E（GUI 实际点 ♂harden）。通过标准：零失败 + 修掉发现的问题 + 文档与实现对齐。",
+  "steps": [
+    {
+      "id": "s1",
+      "title": "把全方位全面测试拆成能并行的执行批次",
+      "status": "completed",
+      "acceptance": [
+        "批次清单合起来覆盖全方位全面，无遗漏"
+      ],
+      "verification": "human",
+      "verify": true,
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "批次清单 A–H 已写入 design.md 并获用户批准；覆盖功能/边界/契约/真实运行/文档/打包六维。"
+    },
+    {
+      "id": "s2",
+      "title": "按批次硬干一遍全方位全面测试，能并行就并行",
+      "status": "completed",
+      "acceptance": [
+        "所有批次全部执行完成，且每个批次都有完成结果"
+      ],
+      "verification": "human",
+      "verify": true,
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "8 批次全部执行：A 248/248、B 语法全绿、C 1 真缺陷已修、D 18/20/22 全绿、E 26/26+真实模型、F 桌面窗口点击通过、G 3 处文档修复、H 打包与 profile 哈希一致。"
+    },
+    {
+      "id": "s3",
+      "title": "汇总测试结论，逐条核对项目一点问题都没有",
+      "status": "completed",
+      "acceptance": [
+        "结论明确为项目一点问题都没有"
+      ],
+      "verification": "human",
+      "verify": true,
+      "verified": true,
+      "verifiedBy": "human",
+      "verificationNotes": "结论：已发现的问题全部修复（1 真缺陷 + 3 文档过期），复跑 248/248 全绿、三版本全绿、真机 26/26、桌面 GUI 通过；9 项限制如实列出（check.md 第六节），不宣称零风险。"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "title": "四态边框特效 + 开锻按钮重做（动画强制开启）",
+  "status": "planning",
+  "work": {
+    "type": "feat",
+    "mode": "standard",
+    "stage": "prd",
+    "execution_lane": "standard"
+  },
+  "description": "用户反馈：busy 态跑马灯消失、开锻按钮没有之前的效果。根因已定位——系统 SPI_GETCLIENTAREAANIMATION=0 → Chromium 报 prefers-reduced-motion: reduce → 插件 CSS 全量禁用动画。本轮重做四态边框特效（每态独一无二）+ 开锻按钮重设计，动画默认强制开启并保留 auto 开关。",
+  "steps": [
+    {
+      "id": "s1",
+      "title": "摸清四态 CSS 结构与动画关闭点，列出改动清单",
+      "status": "pending",
+      "acceptance": [
+        "清单覆盖 idle/busy/done/error 四态与开锻按钮，并指明 reduced-motion 关闭点"
+      ],
+      "verification": "human",
+      "verify": true
+    },
+    {
+      "id": "s2",
+      "title": "设计四套状态边框与开锻按钮视觉方案",
+      "status": "pending",
+      "acceptance": [
+        "四态各有可辨识的边框语义，开锻按钮有明确视觉方案，motion 策略明确"
+      ],
+      "verification": "human",
+      "verify": true
+    },
+    {
+      "id": "s3",
+      "title": "实现样式与 motion 配置项",
+      "status": "pending",
+      "acceptance": [
+        "四态边框与开锻按钮落地，默认强制动画，配置可切回 auto"
+      ],
+      "verification": "ai",
+      "verify": true
+    },
+    {
+      "id": "s4",
+      "title": "预览页与桌面版真机验证四态视觉",
+      "status": "pending",
+      "acceptance": [
+        "四态截图逐一比对无混淆，预览图更新"
+      ],
+      "verification": "human",
+      "verify": true
+    },
+    {
+      "id": "s5",
+      "title": "全量测试与文档同步",
+      "status": "pending",
+      "acceptance": [
+        "selftest 全绿，README 与实际一致"
+      ],
+      "verification": "ai",
+      "verify": true
+    }
+  ]
+}
