@@ -1516,7 +1516,9 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 
 // --- what npm would actually publish ---------------------------------------
 {
-  const whitelist = ['client.js', 'cordis.patch.yml', 'index.js', 'LICENSE', 'README.md'];
+  // Runtime files plus the docs the README links to — npm renders the README on
+  // the package page, so a link into docs/ has to resolve inside the tarball too.
+  const whitelist = ['client.js', 'cordis.patch.yml', 'docs', 'index.js', 'LICENSE', 'README.md'];
   const files = Array.isArray(pkg.files) ? pkg.files : [];
   // A bare `.` or `./tools` would also pass a naive "does not start with tools"
   // check while packing the whole repository, so pin the list itself.
@@ -1708,22 +1710,34 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
   }
 }
 
-// --- README claims must match this run -------------------------------------
+// --- documentation claims must match this run ------------------------------
 // This guard exists because the published count drifted before (README claimed
 // 248 while the suite had grown). Keep the assertion LAST: `total` counts the
 // checks before it plus itself, so anything appended after this would silently
 // invalidate the comparison. The pattern is deliberately narrow — only the three
 // places that state the suite size may carry a number.
+//
+// The long-form docs moved from README.md into docs/, so scan both: the count is
+// allowed to live wherever the prose ended up, but every occurrence must agree.
 {
-  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
-  const claims = [...readme.matchAll(/离线 (\d+) 项|验证覆盖\*\*（(\d+) 项）|离线自测（(\d+) 项）/g)].map((match) =>
-    Number(match[1] ?? match[2] ?? match[3]),
-  );
+  const docPaths = ['../README.md', '../docs/index.md', '../docs/development.md', '../docs/configuration.md', '../docs/http-api.md', '../docs/known-limits.md'];
+  const claims = [];
+  for (const relative of docPaths) {
+    let text;
+    try {
+      text = readFileSync(new URL(relative, import.meta.url), 'utf8');
+    } catch {
+      continue; // a doc that does not exist cannot contradict anything
+    }
+    for (const match of text.matchAll(/离线 (\d+) 项|验证覆盖\*\*（(\d+) 项）|离线自测（(\d+) 项）/g)) {
+      claims.push(Number(match[1] ?? match[2] ?? match[3]));
+    }
+  }
   const total = passed + failed + 1;
   check(
-    'README states this exact check count',
+    'the docs state this exact check count everywhere it appears',
     claims.length === 3 && claims.every((count) => count === total),
-    'README=' + JSON.stringify(claims) + ' actual=' + total,
+    'docs=' + JSON.stringify(claims) + ' actual=' + total,
   );
 }
 
