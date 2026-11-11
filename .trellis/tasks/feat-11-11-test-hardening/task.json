@@ -1,6 +1,6 @@
 {
   "title": "测试与工程治理加固：lint 门禁、npm scripts、打包瘦身、文档校正",
-  "status": "in_progress",
+  "status": "completed",
   "work": {
     "type": "feat",
     "mode": "standard",
